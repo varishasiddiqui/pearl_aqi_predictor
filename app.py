@@ -308,7 +308,7 @@ try:
             ax.scatter([now_karachi], [current_aqi], color=color, s=110, zorder=6, edgecolors="white", linewidths=2, label="Now")
             ax.axhline(current_aqi, color="white", linestyle="--", alpha=0.3, linewidth=1)
             ax.set_ylabel("AQI", color="white", fontsize=11)
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%I %p"))
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%I %p", tz=KARACHI_TZ))
             ax.grid(True, alpha=0.15, color="white")
             ax.tick_params(colors="white")
             for spine in ax.spines.values():
@@ -366,7 +366,7 @@ try:
                 ax.axhline(100, color="yellow", linestyle="--", alpha=0.3, linewidth=0.8)
                 ax.axhline(150, color="orange", linestyle="--", alpha=0.3, linewidth=0.8)
                 ax.set_ylabel("AQI", color="white", fontsize=10)
-                ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d"))
+                ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d", tz=KARACHI_TZ))
                 ax.grid(True, alpha=0.1, color="white")
                 ax.tick_params(colors="white", labelsize=8)
                 for spine in ax.spines.values():
