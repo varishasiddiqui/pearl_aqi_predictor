@@ -1,4 +1,4 @@
-app_code = '''
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -144,9 +144,3 @@ except Exception as e:
 
 st.divider()
 st.caption("Pearls AQI Predictor | MLOps Project | Data: OpenWeather + Open-Meteo")
-'''
-
-from google.colab import files
-with open('app.py', 'w') as f:
-    f.write(app_code)
-files.download('app.py')
