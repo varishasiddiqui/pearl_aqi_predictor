@@ -190,7 +190,7 @@ try:
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%I %p"))
             ax.grid(True, alpha=0.15, color="white")
             ax.tick_params(colors="white")
-            for spine in ax.spines.values(): spine.set_color("rgba(255,255,255,0.1)")
+            for spine in ax.spines.values(): spine.set_color((1, 1, 1, 0.1))
             ax.set_ylim(max(0, min(trend_aqi)-10), max(trend_aqi)+10)
             plt.tight_layout()
             st.pyplot(fig)
@@ -271,7 +271,7 @@ try:
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d"))
         ax.grid(True, alpha=0.1, color="white")
         ax.tick_params(colors="white", labelsize=8)
-        for spine in ax.spines.values(): spine.set_color("rgba(255,255,255,0.1)")
+        for spine in ax.spines.values(): spine.set_color((1, 1, 1, 0.1))
         plt.tight_layout()
         st.pyplot(fig)
         
