@@ -6,7 +6,6 @@ import joblib
 import requests
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 st.set_page_config(page_title="Pearls AQI Predictor", layout="wide")
 st.title("🌍 Pearls AQI Predictor - Karachi")
@@ -53,7 +52,7 @@ def calc_aqi(pollutant, conc):
 def get_aqi(components):
     indices = {}
     for p in ["pm2_5","pm10","no2","so2","o3","co"]:
-        indices[p] = calc_aqi(p, components[p])
+        indices[p] = calc_aqi(p, components.get(p, 0))
     return max(indices.values()), max(indices, key=indices.get)
 
 def aqi_category(val):
@@ -71,7 +70,7 @@ try:
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Current AQI", f"{current_aqi} {emoji}", help=f"Dominant: {dominant}")
+        st.metric("Current AQI", f"{current_aqi} {emoji}")
     with col2:
         st.metric("Category", cat)
     with col3:
@@ -79,68 +78,74 @@ try:
     
     st.subheader("📊 Pollutant Levels")
     pcols = st.columns(6)
-    for i, (p, val) in enumerate(pollution.items()):
+    for i, (p, val) in enumerate(list(pollution.items())[:6]):
         with pcols[i]:
             st.metric(p.upper(), f"{val:.1f}")
     
     st.subheader("📅 3-Day AQI Forecast")
     
-    latest = {
-        "pm2_5": pollution["pm2_5"],
-        "so2": pollution["so2"],
-        "aqi_lag_24": current_aqi,
-        "pressure": weather["surface_pressure"],
-        "month": datetime.now().month,
-        "co": pollution["co"],
-        "wind_speed": weather["wind_speed_10m"],
-        "no2": pollution["no2"],
-        "o3": pollution["o3"]
-    }
-    
-    forecast_times = []
-    forecast_aqi = []
-    prev_aqi = current_aqi
-    
-    for h in range(1, 73):
-        latest["aqi_lag_24"] = prev_aqi if h <= 24 else forecast_aqi[h-25] if h > 24 else prev_aqi
-        X = pd.DataFrame([latest])[feature_cols]
-        X_scaled = scaler.transform(X)
-        pred = model.predict(X_scaled)[0]
-        pred = max(0, pred)
-        forecast_times.append(datetime.now() + timedelta(hours=h))
-        forecast_aqi.append(pred)
-        if h % 24 == 0:
-            prev_aqi = pred
-    
-    fig, ax = plt.subplots(figsize=(12, 4))
-    ax.plot(forecast_times, forecast_aqi, color="steelblue", linewidth=1.5)
-    ax.fill_between(forecast_times, [a-3 for a in forecast_aqi], [a+3 for a in forecast_aqi], alpha=0.2)
-    ax.axhspan(0, 50, alpha=0.1, color="green")
-    ax.axhspan(50, 100, alpha=0.1, color="yellow")
-    ax.axhspan(100, 150, alpha=0.1, color="orange")
-    ax.axhspan(150, 200, alpha=0.1, color="red")
-    ax.set_ylabel("AQI")
-    ax.set_title("3-Day AQI Forecast (with ±3 uncertainty)")
-    ax.grid(True, alpha=0.3)
-    st.pyplot(fig)
-    
-    st.subheader("📋 Day-wise Summary")
-    for d in range(3):
-        day_preds = forecast_aqi[d*24:(d+1)*24]
-        day_avg = np.mean(day_preds)
-        day_cat, day_emoji = aqi_category(day_avg)
-        day_date = (datetime.now() + timedelta(days=d+1)).strftime("%d %b %Y")
-        st.write(f"{day_emoji} **{day_date}**: Avg AQI **{day_avg:.1f}** ({day_cat})")
-    
-    if any(a > 150 for a in forecast_aqi):
-        st.error("🚨 ALERT: Hazardous AQI levels expected in next 3 days!")
-    elif any(a > 100 for a in forecast_aqi):
-        st.warning("⚠️ WARNING: Unhealthy AQI levels expected in next 3 days")
-    else:
-        st.success("✅ AQI levels expected to stay within safe range")
+    try:
+        latest = {
+            "pm2_5": pollution.get("pm2_5", 20),
+            "so2": pollution.get("so2", 0.5),
+            "aqi_lag_24": current_aqi,
+            "pressure": weather.get("surface_pressure", 1000),
+            "month": datetime.now().month,
+            "co": pollution.get("co", 70),
+            "wind_speed": weather.get("wind_speed_10m", 10),
+            "no2": pollution.get("no2", 0.1),
+            "o3": pollution.get("o3", 40)
+        }
+        
+        forecast_times = []
+        forecast_aqi = []
+        
+        for h in range(1, 73):
+            if h <= 24:
+                latest["aqi_lag_24"] = current_aqi
+            else:
+                latest["aqi_lag_24"] = forecast_aqi[h-25]
+            
+            X = pd.DataFrame([latest])[feature_cols]
+            X_scaled = scaler.transform(X)
+            pred = float(model.predict(X_scaled).flatten()[0])
+            pred = max(0, pred)
+            forecast_times.append(datetime.now() + timedelta(hours=h))
+            forecast_aqi.append(pred)
+        
+        fig, ax = plt.subplots(figsize=(12, 4))
+        ax.plot(forecast_times, forecast_aqi, color="steelblue", linewidth=1.5)
+        ax.fill_between(forecast_times, [a-3 for a in forecast_aqi], [a+3 for a in forecast_aqi], alpha=0.2)
+        ax.axhspan(0, 50, alpha=0.1, color="green")
+        ax.axhspan(50, 100, alpha=0.1, color="yellow")
+        ax.axhspan(100, 150, alpha=0.1, color="orange")
+        ax.axhspan(150, 200, alpha=0.1, color="red")
+        ax.set_ylabel("AQI")
+        ax.set_title("3-Day AQI Forecast")
+        ax.grid(True, alpha=0.3)
+        st.pyplot(fig)
+        
+        st.subheader("📋 Day-wise Summary")
+        for d in range(3):
+            day_preds = forecast_aqi[d*24:(d+1)*24]
+            if len(day_preds) > 0:
+                day_avg = np.mean(day_preds)
+                day_cat, day_emoji = aqi_category(day_avg)
+                day_date = (datetime.now() + timedelta(days=d+1)).strftime("%d %b %Y")
+                st.write(f"{day_emoji} **{day_date}**: Avg AQI **{day_avg:.1f}** ({day_cat})")
+        
+        if any(a > 150 for a in forecast_aqi):
+            st.error("🚨 ALERT: Hazardous AQI expected!")
+        elif any(a > 100 for a in forecast_aqi):
+            st.warning("⚠️ WARNING: Unhealthy AQI expected")
+        else:
+            st.success("✅ AQI levels within safe range")
+            
+    except Exception as e:
+        st.error(f"Forecast error: {e}")
     
 except Exception as e:
-    st.error(f"Error fetching data: {e}")
+    st.error(f"Error: {e}")
 
 st.divider()
-st.caption("Pearls AQI Predictor | MLOps Project | Data: OpenWeather + Open-Meteo")
+st.caption("Pearls AQI Predictor | MLOps Project")
