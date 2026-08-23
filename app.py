@@ -1,4 +1,4 @@
-
+app_code = '''
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -11,7 +11,6 @@ import seaborn as sns
 st.set_page_config(page_title="Pearls AQI Predictor", layout="wide")
 st.title("🌍 Pearls AQI Predictor - Karachi")
 
-# Load model and scaler
 @st.cache_resource
 def load_model():
     model = joblib.load("best_model_ridge.pkl")
@@ -21,25 +20,21 @@ def load_model():
 
 model, scaler, feature_cols = load_model()
 
-# Fetch current data
 @st.cache_data(ttl=3600)
 def fetch_current_data():
-    API_KEY = st.secrets.get("OPENWEATHER_API_KEY", "YOUR_API_KEY")
+    API_KEY = st.secrets.get("OPENWEATHER_API_KEY", "")
     LAT, LON = 24.8607, 67.0011
     
-    # Pollution data
     url = "http://api.openweathermap.org/data/2.5/air_pollution?lat={}&lon={}&appid={}"
     resp = requests.get(url.format(LAT, LON, API_KEY))
     pollution = resp.json()["list"][0]["components"]
     
-    # Weather data
-    wurl = "https://api.open-meteo.com/v1/current?latitude={}&longitude={}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,surface_pressure"
+    wurl = "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,surface_pressure"
     wresp = requests.get(wurl.format(LAT, LON))
     weather = wresp.json()["current"]
     
     return pollution, weather
 
-# AQI calculation
 BREAKPOINTS = {
     "pm2_5": [(0,12.0,0,50),(12.1,35.4,51,100),(35.5,55.4,101,150),(55.5,150.4,151,200),(150.5,250.4,201,300),(250.5,500.4,301,500)],
     "pm10": [(0,54,0,50),(55,154,51,100),(155,254,101,150),(255,354,151,200),(355,424,201,300),(425,604,301,500)],
@@ -61,7 +56,6 @@ def get_aqi(components):
         indices[p] = calc_aqi(p, components[p])
     return max(indices.values()), max(indices, key=indices.get)
 
-# AQI category
 def aqi_category(val):
     if val <= 50: return "Good", "🟢"
     elif val <= 100: return "Moderate", "🟡"
@@ -70,13 +64,11 @@ def aqi_category(val):
     elif val <= 300: return "Very Unhealthy", "🟣"
     else: return "Hazardous", "🟤"
 
-# Fetch data
 try:
     pollution, weather = fetch_current_data()
     current_aqi, dominant = get_aqi(pollution)
     cat, emoji = aqi_category(current_aqi)
     
-    # Current AQI display
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Current AQI", f"{current_aqi} {emoji}", help=f"Dominant: {dominant}")
@@ -85,17 +77,14 @@ try:
     with col3:
         st.metric("Last Updated", datetime.now().strftime("%H:%M %d %b"))
     
-    # Pollutant levels
     st.subheader("📊 Pollutant Levels")
     pcols = st.columns(6)
     for i, (p, val) in enumerate(pollution.items()):
         with pcols[i]:
             st.metric(p.upper(), f"{val:.1f}")
     
-    # 3-Day Forecast
     st.subheader("📅 3-Day AQI Forecast")
     
-    # Get latest row features for prediction
     latest = {
         "pm2_5": pollution["pm2_5"],
         "so2": pollution["so2"],
@@ -108,7 +97,6 @@ try:
         "o3": pollution["o3"]
     }
     
-    # Predict next 72 hours (3 days)
     forecast_times = []
     forecast_aqi = []
     prev_aqi = current_aqi
@@ -124,23 +112,18 @@ try:
         if h % 24 == 0:
             prev_aqi = pred
     
-    # Plot forecast
     fig, ax = plt.subplots(figsize=(12, 4))
     ax.plot(forecast_times, forecast_aqi, color="steelblue", linewidth=1.5)
     ax.fill_between(forecast_times, [a-3 for a in forecast_aqi], [a+3 for a in forecast_aqi], alpha=0.2)
-    
-    # Color zones
     ax.axhspan(0, 50, alpha=0.1, color="green")
     ax.axhspan(50, 100, alpha=0.1, color="yellow")
     ax.axhspan(100, 150, alpha=0.1, color="orange")
     ax.axhspan(150, 200, alpha=0.1, color="red")
-    
     ax.set_ylabel("AQI")
     ax.set_title("3-Day AQI Forecast (with ±3 uncertainty)")
     ax.grid(True, alpha=0.3)
     st.pyplot(fig)
     
-    # Day-wise summary
     st.subheader("📋 Day-wise Summary")
     for d in range(3):
         day_preds = forecast_aqi[d*24:(d+1)*24]
@@ -149,7 +132,6 @@ try:
         day_date = (datetime.now() + timedelta(days=d+1)).strftime("%d %b %Y")
         st.write(f"{day_emoji} **{day_date}**: Avg AQI **{day_avg:.1f}** ({day_cat})")
     
-    # Alert
     if any(a > 150 for a in forecast_aqi):
         st.error("🚨 ALERT: Hazardous AQI levels expected in next 3 days!")
     elif any(a > 100 for a in forecast_aqi):
@@ -159,8 +141,12 @@ try:
     
 except Exception as e:
     st.error(f"Error fetching data: {e}")
-    st.info("Make sure OPENWEATHER_API_KEY is set in Streamlit secrets")
 
-# Footer
 st.divider()
 st.caption("Pearls AQI Predictor | MLOps Project | Data: OpenWeather + Open-Meteo")
+'''
+
+from google.colab import files
+with open('app.py', 'w') as f:
+    f.write(app_code)
+files.download('app.py')
