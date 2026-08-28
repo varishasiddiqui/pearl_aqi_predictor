@@ -484,7 +484,7 @@ try:
 
     # ---- Hero Halo ----
     st.markdown(f"""
-    <div class='hero' style='--ring-color:{color}; --breathe-speed:{breathe-speed}'>
+    <div class='hero' style='--ring-color:{color}; --breathe-speed:{breathe_speed}'>
         <p class='hero-eyebrow'>Current Air Quality Index</p>
         <div class='halo-wrap'>
             <div class='halo-ring'></div>
