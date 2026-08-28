@@ -52,14 +52,29 @@ def load_model():
             import hopsworks
             project = hopsworks.login(api_key_value=hopsworks_key)
             mr = project.get_model_registry()
-            registry_model = mr.get_best_model(MODEL_NAME, "rmse", "min")
-            model_dir = registry_model.download()
-            import os
-            model = joblib.load(os.path.join(model_dir, "best_model.pkl"))
-            scaler = joblib.load(os.path.join(model_dir, "scaler.pkl"))
-            features = joblib.load(os.path.join(model_dir, "feature_cols.pkl"))
-            st.session_state["model_source"] = f"Hopsworks Model Registry (v{registry_model.version})"
-            return model, scaler, features
+            all_versions = mr.get_models(MODEL_NAME)
+            if not all_versions:
+                raise RuntimeError(f"No versions registered yet for model '{MODEL_NAME}'.")
+            # Try newest version first, falling back to older ones only if a
+            # given version's artifacts are missing/corrupted (e.g. leftover
+            # broken registrations from earlier debugging). This is more
+            # robust than get_best_model(), which can still point at a
+            # broken version if its recorded metric happens to look "best".
+            all_versions = sorted(all_versions, key=lambda m: m.version, reverse=True)
+            last_error = None
+            for registry_model in all_versions:
+                try:
+                    import os
+                    model_dir = registry_model.download()
+                    model = joblib.load(os.path.join(model_dir, "best_model.pkl"))
+                    scaler = joblib.load(os.path.join(model_dir, "scaler.pkl"))
+                    features = joblib.load(os.path.join(model_dir, "feature_cols.pkl"))
+                    st.session_state["model_source"] = f"Hopsworks Model Registry (v{registry_model.version})"
+                    return model, scaler, features
+                except Exception as version_err:
+                    last_error = version_err
+                    continue
+            raise last_error
         except Exception as e:
             st.sidebar.warning(f"Couldn't load from Hopsworks Model Registry, using local files instead. ({e})")
 
