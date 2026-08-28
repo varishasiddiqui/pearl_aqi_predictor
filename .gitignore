@@ -1,0 +1,19 @@
+# Secrets — never commit real API keys
+.streamlit/secrets.toml
+.env
+
+# Model artifacts — now pulled from Hopsworks Model Registry at runtime
+*.pkl
+*.keras
+*.h5
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+venv/
+.venv/
+
+# OS/editor cruft
+.DS_Store
+.vscode/
