@@ -111,7 +111,11 @@ with st.sidebar:
 # the feature pipeline has run for today.
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=1800)
-def fetch_today_actuals_from_feature_store():
+def fetch_recent_actuals_from_feature_store(lookback_hours=72):
+    """Pull the last `lookback_hours` of REAL measured rows from the Feature
+    Store. We need more than just "today" here: aqi_lag_24 / aqi_rolling_24
+    (used by whichever features the training pipeline selected) require up
+    to 24h of real history to seed the recursive forecast correctly."""
     hopsworks_key = st.secrets.get("HOPSWORKS_API_KEY", "")
     if not hopsworks_key:
         return pd.DataFrame()
@@ -124,8 +128,8 @@ def fetch_today_actuals_from_feature_store():
         if df.empty:
             return df
         df["datetime"] = pd.to_datetime(df["datetime"]).dt.tz_convert(KARACHI_TZ)
-        today_start = now_karachi.normalize()
-        df = df[(df["datetime"] >= today_start) & (df["datetime"] <= now_karachi)]
+        window_start = now_karachi - pd.Timedelta(hours=lookback_hours)
+        df = df[(df["datetime"] >= window_start) & (df["datetime"] <= now_karachi)]
         return df.sort_values("datetime").reset_index(drop=True)
     except Exception as e:
         st.sidebar.warning(f"Feature Store read failed, today's trend may be incomplete. ({e})")
@@ -227,38 +231,88 @@ def aqi_info(val):
     else: return "Hazardous", "🟤", "#880e4f", "glow-red"
 
 
-def build_forecast(feature_df, current_aqi, feature_cols, model, scaler, hours=72):
+def build_forecast(feature_df, hist_lookback_df, current_aqi, current_row, feature_cols, model, scaler, hours=72):
     """Recursively predict AQI hour-by-hour using REAL forecasted pollutant/
-    weather values for each hour (not a frozen snapshot). Only aqi_lag_24
-    has to be approximated recursively, since we don't have a full rolling
-    history of past AQI to look back exactly 24h for every future step."""
-    preds = []
+    weather values for each hour (not a frozen snapshot).
+
+    Builds the FULL candidate feature set used by training_pipeline.py's
+    select_features() (raw pollutants/weather, temporal features, and
+    aqi/pm2.5 lags + rolling means), then subsets to whatever `feature_cols`
+    the currently-registered model actually needs. This has to mirror
+    training exactly — training picks its feature set dynamically via
+    correlation, so the app can't hardcode a fixed handful of columns or it
+    silently drifts out of sync with whatever model gets registered next.
+
+    aqi/pm2.5 history is seeded from real Feature Store readings (so lag_24 /
+    rolling_24 are correct for the first ~24 predicted hours) and then
+    extended with the model's own predictions as we step forward.
+    """
     df = feature_df.reset_index(drop=True)
     n = min(hours, len(df))
+
+    aqi_history = list(hist_lookback_df["aqi"]) if hist_lookback_df is not None and not hist_lookback_df.empty else []
+    pm25_history = list(hist_lookback_df["pm2_5"]) if hist_lookback_df is not None and not hist_lookback_df.empty else []
+    aqi_history.append(current_aqi)
+    pm25_history.append(current_row.get("pm2_5", np.nan))
+
+    def lag(hist, k):
+        if len(hist) >= k:
+            return hist[-k]
+        return hist[0] if hist else np.nan
+
+    def rolling(hist, k):
+        window = hist[-k:] if len(hist) >= k else hist
+        return float(np.mean(window)) if window else np.nan
+
+    preds, times = [], []
     for h in range(n):
         row = df.iloc[h]
-        lag = current_aqi if h < 24 else preds[h - 24]
+        dt = row["datetime"]
         feat = {
             "pm2_5": row.get("pm2_5", np.nan),
+            "pm10": row.get("pm10", np.nan),
             "so2": row.get("so2", np.nan),
-            "aqi_lag_24": lag,
-            "pressure": row.get("pressure", np.nan),
-            "month": row["datetime"].month,
             "co": row.get("co", np.nan),
-            "wind_speed": row.get("wind_speed", np.nan),
             "no2": row.get("no2", np.nan),
             "o3": row.get("o3", np.nan),
+            "pressure": row.get("pressure", np.nan),
+            "wind_speed": row.get("wind_speed", np.nan),
+            "humidity": row.get("humidity", np.nan),
+            "temperature": row.get("temperature", np.nan),
+            "month": dt.month,
+            "hour": dt.hour,
+            "day_of_week": dt.dayofweek,
+            "is_weekend": int(dt.dayofweek in (5, 6)),
+            "aqi_lag_1": lag(aqi_history, 1),
+            "aqi_lag_3": lag(aqi_history, 3),
+            "aqi_lag_24": lag(aqi_history, 24),
+            "pm25_lag_1": lag(pm25_history, 1),
+            "pm25_lag_24": lag(pm25_history, 24),
+            "aqi_rolling_3": rolling(aqi_history, 3),
+            "aqi_rolling_6": rolling(aqi_history, 6),
+            "aqi_rolling_24": rolling(aqi_history, 24),
+            "pm25_rolling_24": rolling(pm25_history, 24),
         }
+
         X = pd.DataFrame([feat])[feature_cols]
         X_scaled = scaler.transform(X)
         pred = max(0, float(model.predict(X_scaled).flatten()[0]))
+
         preds.append(pred)
-    return df["datetime"].iloc[:n].tolist(), preds
+        times.append(dt)
+        aqi_history.append(pred)
+        pm25_history.append(row.get("pm2_5", np.nan))
+
+    return times, preds
 
 
 try:
     pollution, weather, combined_df = fetch_current_data()
-    hist_df = fetch_today_actuals_from_feature_store()
+    hist_lookback_df = fetch_recent_actuals_from_feature_store(lookback_hours=72)
+    hist_df = (
+        hist_lookback_df[hist_lookback_df["datetime"] >= now_karachi.normalize()]
+        if not hist_lookback_df.empty else hist_lookback_df
+    )
     current_aqi, dominant = get_aqi(pollution)
     cat, emoji, color, glow = aqi_info(current_aqi)
 
@@ -317,8 +371,8 @@ try:
             future_today_df = combined_df[future_today_mask].sort_values("datetime")
             if not future_today_df.empty:
                 future_times, future_preds = build_forecast(
-                    future_today_df, current_aqi, feature_cols, model, scaler,
-                    hours=len(future_today_df)
+                    future_today_df, hist_lookback_df, current_aqi, pollution,
+                    feature_cols, model, scaler, hours=len(future_today_df)
                 )
 
         if hist_df.empty and not future_times:
@@ -370,7 +424,10 @@ try:
             st.warning("Forecast data unavailable right now — API may be rate-limited or unavailable.")
         else:
             future_df = combined_df[combined_df["datetime"] > now_karachi].sort_values("datetime")
-            times, forecast_aqi = build_forecast(future_df, current_aqi, feature_cols, model, scaler, hours=72)
+            times, forecast_aqi = build_forecast(
+                future_df, hist_lookback_df, current_aqi, pollution,
+                feature_cols, model, scaler, hours=72
+            )
 
             if not times:
                 st.warning("Not enough forecast data returned by the API to build a 3-day view.")
