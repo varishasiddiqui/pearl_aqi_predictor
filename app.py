@@ -13,109 +13,165 @@ FEATURE_GROUP_NAME = "aqi_features_karachi"
 FEATURE_GROUP_VERSION = 1
 MODEL_NAME = "aqi_predictor_karachi"
 
-# Use pandas-native tz-aware timestamps everywhere (NOT raw python datetime.datetime
-# objects). Mixing raw datetime objects with matplotlib/pandas across a Streamlit
-# rerun is what was causing "unsupported operand type(s) for /: 'datetime.datetime'
-# and 'int'" — pandas Timestamps avoid that class of bug entirely.
 now_karachi = pd.Timestamp.now(tz="UTC").tz_convert(KARACHI_TZ)
 
 st.set_page_config(page_title="Pearl · AQI Station Karachi", layout="wide", initial_sidebar_state="expanded", page_icon="🫁")
 
 st.markdown("""<style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
     :root{
-        --ink:#0A0E17; --panel:#121826; --panel-2:#161d2e; --line:#232B3D;
-        --paper:#ECEEF3; --dim:#8891A6; --dim-2:#5B6478;
-        --good:#3FCFB4; --moderate:#E3B23C; --uhfs:#E0812F;
-        --unhealthy:#D2503A; --very:#9457C7; --hazard:#B23A52;
+        --bg:#F4F6F9; --white:#FFFFFF; --white-2:#F8F9FB; --white-3:#EEF1F5;
+        --border:#E2E6ED; --border-2:#D1D5DE;
+        --ink:#111827; --ink-2:#374151; --ink-3:#6B7280; --ink-4:#9CA3AF;
+        --good:#10B981; --moderate:#F59E0B; --uhfs:#F97316;
+        --unhealthy:#EF4444; --very:#8B5CF6; --hazard:#DC2626;
+        --shadow:0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+        --shadow-md:0 4px 12px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.04);
+        --shadow-lg:0 10px 30px rgba(0,0,0,0.08), 0 4px 8px rgba(0,0,0,0.04);
+        --radius:16px;
     }
 
-    html, body, [class*="st-"] { font-family: 'IBM Plex Sans', sans-serif !important; }
-    .stApp { background: var(--ink) !important; }
-    .block-container { padding-top: 1.2rem; padding-bottom: 3rem; max-width: 1180px; }
-    h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif !important; color: var(--paper) !important; letter-spacing: -0.01em; }
-    p, span, label, div { color: var(--paper); }
-    .mono { font-family: 'IBM Plex Mono', monospace !important; }
+    html, body, [class*="st-"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
+    .stApp { background: var(--bg) !important; }
+    .block-container { padding-top: 1.5rem; padding-bottom: 3rem; max-width: 1180px; }
+    h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; color: var(--ink) !important; letter-spacing: -0.02em; }
+    p, span, label, div { color: var(--ink-2); }
+    .mono { font-family: 'JetBrains Mono', monospace !important; }
 
-    /* ---- sidebar: reads like a console diagnostics panel ---- */
-    section[data-testid="stSidebar"] { background: var(--panel) !important; border-right: 1px solid var(--line); }
-    section[data-testid="stSidebar"] * { color: var(--paper) !important; }
-    section[data-testid="stSidebar"] hr { border-color: var(--line) !important; }
-    .diag-label { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--dim); letter-spacing:0.08em; text-transform:uppercase; margin:0 0 6px; }
-    .diag-row { display:flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--paper); padding:3px 0; }
+    /* ---- Sidebar ---- */
+    section[data-testid="stSidebar"] {
+        background: var(--white) !important;
+        border-right: 1px solid var(--border);
+        box-shadow: 2px 0 8px rgba(0,0,0,0.03);
+    }
+    section[data-testid="stSidebar"] * { color: var(--ink-2) !important; }
+    section[data-testid="stSidebar"] hr { border-color: var(--border) !important; }
+
+    .diag-label {
+        font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink-4);
+        letter-spacing:0.1em; text-transform:uppercase; margin:0 0 8px; font-weight:500;
+    }
+    .diag-row {
+        display:flex; align-items:center; gap:8px;
+        font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--ink-2); padding:3px 0;
+    }
     .dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-    .dot-on { background:var(--good); box-shadow:0 0 6px var(--good); }
-    .dot-off { background:var(--dim-2); }
+    .dot-on { background:var(--good); box-shadow:0 0 6px rgba(16,185,129,0.4); }
+    .dot-off { background:var(--ink-4); }
 
-    /* ---- generic panel/card ---- */
-    .panel { background: var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px 24px; margin:14px 0; }
-    .panel-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; }
-    .panel-title { font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:16px; color:var(--paper); margin:0; }
-    .panel-sub { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:0.07em; }
+    /* ---- Panel / Card ---- */
+    .panel {
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 24px 28px;
+        margin: 16px 0;
+        box-shadow: var(--shadow);
+    }
+    .panel-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:16px; }
+    .panel-title { font-family:'Inter',sans-serif; font-weight:600; font-size:15px; color:var(--ink); margin:0; }
+    .panel-sub { font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink-4); text-transform:uppercase; letter-spacing:0.08em; font-weight:500; }
 
-    /* ---- header strip ---- */
-    .station-header { display:flex; align-items:center; justify-content:space-between; padding:10px 4px 18px; border-bottom:1px solid var(--line); margin-bottom:18px; flex-wrap:wrap; gap:8px; }
-    .station-id { font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--dim); letter-spacing:0.1em; }
-    .station-name { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:22px; color:var(--paper); margin:0; }
-    .station-clock { font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--dim); text-align:right; }
+    /* ---- Header Strip ---- */
+    .station-header {
+        display:flex; align-items:center; justify-content:space-between;
+        padding:8px 0 20px; border-bottom:1px solid var(--border); margin-bottom:20px;
+        flex-wrap:wrap; gap:10px;
+    }
+    .station-id { font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--ink-4); letter-spacing:0.1em; font-weight:500; }
+    .station-name { font-family:'Inter',sans-serif; font-weight:700; font-size:22px; color:var(--ink); margin:0; }
+    .station-clock { font-family:'JetBrains Mono',monospace; font-size:12.5px; color:var(--ink-3); text-align:right; }
 
-    /* ---- breathing halo hero ---- */
-    .hero { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:38px 20px 30px; }
-    .halo-wrap { position:relative; width:220px; height:220px; display:flex; align-items:center; justify-content:center; margin-bottom:6px; }
-    .halo-ring { position:absolute; inset:0; border-radius:50%; border:2px solid var(--ring-color); opacity:0.55; animation: breathe var(--breathe-speed) ease-in-out infinite; }
-    .halo-ring.r2 { inset:14px; animation-delay: calc(var(--breathe-speed) / -2); opacity:0.35; }
-    .halo-core { position:relative; width:172px; height:172px; border-radius:50%; background: radial-gradient(circle at 50% 40%, var(--panel-2), var(--panel)); border:1px solid var(--line); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2; }
-    .halo-value { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:58px; line-height:1; color:var(--ring-color); }
-    .halo-cat { font-family:'IBM Plex Mono',monospace; font-size:11.5px; letter-spacing:0.06em; text-transform:uppercase; color:var(--dim); margin-top:6px; }
-    .hero-eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--dim); letter-spacing:0.12em; text-transform:uppercase; margin-bottom:2px; }
-    .hero-dominant { font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--dim); margin-top:10px; }
+    /* ---- Breathing Halo Hero ---- */
+    .hero { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:36px 20px 28px; }
+    .halo-wrap { position:relative; width:210px; height:210px; display:flex; align-items:center; justify-content:center; margin-bottom:4px; }
+    .halo-ring {
+        position:absolute; inset:0; border-radius:50%;
+        border:2px solid var(--ring-color); opacity:0.3;
+        animation: breathe var(--breathe-speed) ease-in-out infinite;
+    }
+    .halo-ring.r2 { inset:16px; animation-delay: calc(var(--breathe-speed) / -2); opacity:0.18; }
+    .halo-core {
+        position:relative; width:164px; height:164px; border-radius:50%;
+        background: var(--white);
+        border:1px solid var(--border);
+        box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,0.8);
+        display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2;
+    }
+    .halo-value { font-family:'Inter',sans-serif; font-weight:700; font-size:54px; line-height:1; color:var(--ring-color); }
+    .halo-cat { font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:var(--ink-3); margin-top:6px; font-weight:500; }
+    .hero-eyebrow { font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink-4); letter-spacing:0.12em; text-transform:uppercase; margin-bottom:2px; font-weight:500; }
+    .hero-dominant { font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--ink-3); margin-top:10px; }
 
     @keyframes breathe {
-        0%, 100% { transform: scale(1); opacity:0.55; }
-        50% { transform: scale(1.09); opacity:0.15; }
+        0%, 100% { transform: scale(1); opacity:0.3; }
+        50% { transform: scale(1.08); opacity:0.08; }
     }
     @media (prefers-reduced-motion: reduce) {
         .halo-ring { animation: none !important; }
     }
 
-    /* ---- weather chip strip ---- */
-    .chip-row { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:8px; }
-    .chip { background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:10px 16px; min-width:110px; text-align:center; }
-    .chip-label { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:0.06em; }
-    .chip-value { font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:18px; color:var(--paper); margin-top:2px; }
+    /* ---- Weather Chips ---- */
+    .chip-row { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-top:10px; }
+    .chip {
+        background: var(--white); border:1px solid var(--border); border-radius:14px;
+        padding:14px 20px; min-width:120px; text-align:center; box-shadow:var(--shadow);
+        transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .chip:hover { box-shadow:var(--shadow-md); transform:translateY(-1px); }
+    .chip-label { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--ink-4); text-transform:uppercase; letter-spacing:0.06em; font-weight:500; }
+    .chip-value { font-family:'Inter',sans-serif; font-weight:600; font-size:20px; color:var(--ink); margin-top:3px; }
 
-    /* ---- pollutant gauges ---- */
-    .gauge-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-top:6px; }
+    /* ---- Pollutant Gauges ---- */
+    .gauge-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:14px; margin-top:8px; }
     @media (max-width:900px){ .gauge-grid{ grid-template-columns:repeat(3,1fr);} }
-    .gauge-cell { display:flex; flex-direction:column; align-items:center; gap:6px; }
-    .gauge-name { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--dim); letter-spacing:0.04em; }
-    .gauge-val { font-family:'Space Grotesk',sans-serif; font-size:13px; font-weight:600; }
-    .gauge-status { font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--dim-2); text-transform:uppercase; }
+    .gauge-cell { display:flex; flex-direction:column; align-items:center; gap:8px; }
+    .gauge-name { font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink-4); letter-spacing:0.04em; font-weight:500; }
+    .gauge-val { font-family:'Inter',sans-serif; font-size:13px; font-weight:600; }
+    .gauge-status { font-family:'JetBrains Mono',monospace; font-size:9.5px; text-transform:uppercase; font-weight:500; }
 
-    /* ---- forecast day tiles ---- */
-    .day-tile { text-align:center; padding:18px 10px; border-radius:12px; background:var(--panel-2); border:1px solid var(--line); }
-    .day-tile .d-label { font-family:'IBM Plex Mono',monospace; color:var(--dim); font-size:11px; margin:0; letter-spacing:0.04em; }
-    .day-tile .d-val { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:30px; margin:6px 0 2px; }
-    .day-tile .d-cat { font-family:'IBM Plex Mono',monospace; font-size:11px; margin:0; text-transform:uppercase; letter-spacing:0.04em; }
-    .day-tile .d-range { font-family:'IBM Plex Mono',monospace; color:var(--dim); font-size:10.5px; margin-top:8px; }
+    /* ---- Forecast Day Tiles ---- */
+    .day-tile {
+        text-align:center; padding:20px 14px; border-radius:var(--radius);
+        background: var(--white); border:1px solid var(--border); box-shadow:var(--shadow);
+        transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .day-tile:hover { box-shadow:var(--shadow-md); transform:translateY(-2px); }
+    .day-tile .d-label { font-family:'JetBrains Mono',monospace; color:var(--ink-4); font-size:10.5px; margin:0; letter-spacing:0.04em; font-weight:500; }
+    .day-tile .d-val { font-family:'Inter',sans-serif; font-weight:700; font-size:32px; margin:8px 0 4px; }
+    .day-tile .d-cat { font-family:'JetBrains Mono',monospace; font-size:11px; margin:0; text-transform:uppercase; letter-spacing:0.04em; font-weight:500; }
+    .day-tile .d-range { font-family:'JetBrains Mono',monospace; color:var(--ink-4); font-size:10.5px; margin-top:10px; }
 
-    /* ---- guidance strip ---- */
-    .guidance { display:flex; gap:14px; align-items:flex-start; padding:18px 22px; border-radius:12px; border:1px solid var(--gl-color); background:color-mix(in srgb, var(--gl-color) 10%, var(--panel)); }
-    .guidance .g-dot { width:10px; height:10px; border-radius:50%; background:var(--gl-color); margin-top:5px; flex-shrink:0; box-shadow:0 0 8px var(--gl-color); }
-    .guidance .g-title { font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14px; color:var(--paper); margin:0 0 3px; }
-    .guidance .g-body { font-family:'IBM Plex Sans',sans-serif; font-size:13px; color:var(--dim); margin:0; }
+    /* ---- Guidance Strip ---- */
+    .guidance {
+        display:flex; gap:14px; align-items:flex-start; padding:18px 22px;
+        border-radius:14px; border:1px solid var(--gl-color);
+        background: color-mix(in srgb, var(--gl-color) 6%, var(--white));
+        box-shadow: var(--shadow);
+    }
+    .guidance .g-dot { width:10px; height:10px; border-radius:50%; background:var(--gl-color); margin-top:5px; flex-shrink:0; box-shadow:0 0 8px color-mix(in srgb, var(--gl-color) 40%, transparent); }
+    .guidance .g-title { font-family:'Inter',sans-serif; font-weight:600; font-size:14px; color:var(--ink); margin:0 0 4px; }
+    .guidance .g-body { font-family:'Inter',sans-serif; font-size:13px; color:var(--ink-3); margin:0; line-height:1.5; }
 
-    .stAlert { border-radius: 12px !important; background: var(--panel) !important; border:1px solid var(--line) !important; }
-    div[data-testid="stMetricValue"] { color: var(--paper) !important; }
-    hr { border-color: var(--line) !important; }
-    .footer-note { text-align:center; color:var(--dim-2); font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:0.04em; margin-top:6px; }
+    .stAlert { border-radius: 14px !important; background: var(--white) !important; border:1px solid var(--border) !important; box-shadow:var(--shadow) !important; }
+    div[data-testid="stMetricValue"] { color: var(--ink) !important; }
+    hr { border-color: var(--border) !important; }
+
+    .footer-note {
+        text-align:center; color:var(--ink-4);
+        font-family:'JetBrains Mono',monospace; font-size:10px;
+        letter-spacing:0.06em; margin-top:10px; font-weight:500;
+    }
+
+    /* ---- Streamlit native overrides for light theme ---- */
+    .stSelectbox > div > div { background-color: var(--white-2) !important; border-color: var(--border) !important; }
+    div[data-testid="stSidebar"] .stSelectbox label { color: var(--ink-3) !important; }
 </style>""", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
-# Model loading — Hopsworks Model Registry first, local .pkl as fallback
-# (so the dashboard still works if Hopsworks is briefly unreachable).
+# Model loading
 # ---------------------------------------------------------------------------
 @st.cache_resource
 def load_model():
@@ -128,11 +184,6 @@ def load_model():
             all_versions = mr.get_models(MODEL_NAME)
             if not all_versions:
                 raise RuntimeError(f"No versions registered yet for model '{MODEL_NAME}'.")
-            # Try newest version first, falling back to older ones only if a
-            # given version's artifacts are missing/corrupted (e.g. leftover
-            # broken registrations from earlier debugging). This is more
-            # robust than get_best_model(), which can still point at a
-            # broken version if its recorded metric happens to look "best".
             all_versions = sorted(all_versions, key=lambda m: m.version, reverse=True)
             last_error = None
             for registry_model in all_versions:
@@ -161,16 +212,16 @@ def load_model():
 model, scaler, feature_cols = load_model()
 
 with st.sidebar:
-    st.markdown("<p class='panel-title' style='font-size:15px'>Station settings</p>", unsafe_allow_html=True)
+    st.markdown("<p class='panel-title' style='font-size:14px;margin-bottom:16px'>⚙️ Station Settings</p>", unsafe_allow_html=True)
     city_label = st.selectbox("City", ["Karachi"], label_visibility="collapsed")
 
-    st.markdown("<p class='diag-label' style='margin-top:22px'>Model</p>", unsafe_allow_html=True)
+    st.markdown("<p class='diag-label' style='margin-top:24px'>Model</p>", unsafe_allow_html=True)
     st.markdown(f"""
-        <div class='diag-row'>· source&nbsp;&nbsp;<span style='color:var(--dim)'>{st.session_state.get('model_source', 'unknown')}</span></div>
-        <div class='diag-row'>· inputs&nbsp;&nbsp;<span style='color:var(--dim)'>{len(feature_cols)} features</span></div>
+        <div class='diag-row'>· source&nbsp;&nbsp;<span style='color:var(--ink-3)'>{st.session_state.get('model_source', 'unknown')}</span></div>
+        <div class='diag-row'>· inputs&nbsp;&nbsp;<span style='color:var(--ink-3)'>{len(feature_cols)} features</span></div>
     """, unsafe_allow_html=True)
 
-    st.markdown("<p class='diag-label' style='margin-top:22px'>Data sources</p>", unsafe_allow_html=True)
+    st.markdown("<p class='diag-label' style='margin-top:24px'>Data Sources</p>", unsafe_allow_html=True)
     _has_ow = bool(st.secrets.get("OPENWEATHER_API_KEY", ""))
     _has_hw = bool(st.secrets.get("HOPSWORKS_API_KEY", ""))
     sources = [
@@ -183,30 +234,24 @@ with st.sidebar:
         dotclass = "dot-on" if ok else "dot-off"
         state = "configured" if ok else "no key"
         st.markdown(f"""
-        <div class='diag-row' style='align-items:flex-start;margin-bottom:8px'>
+        <div class='diag-row' style='align-items:flex-start;margin-bottom:10px'>
             <span class='dot {dotclass}' style='margin-top:5px'></span>
-            <span>{name}<br><span style='color:var(--dim-2);font-size:11px'>{desc} · {state}</span></span>
+            <span>{name}<br><span style='color:var(--ink-4);font-size:10.5px'>{desc} · {state}</span></span>
         </div>
         """, unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown(f"""
-        <div class='diag-row'>tz&nbsp;&nbsp;<span style='color:var(--dim)'>UTC+5 (PKT)</span></div>
-        <div class='diag-row'>refreshed&nbsp;&nbsp;<span style='color:var(--dim)'>{now_karachi.strftime('%H:%M:%S')}</span></div>
+        <div class='diag-row'>tz&nbsp;&nbsp;<span style='color:var(--ink-3)'>UTC+5 (PKT)</span></div>
+        <div class='diag-row'>refreshed&nbsp;&nbsp;<span style='color:var(--ink-3)'>{now_karachi.strftime('%H:%M:%S')}</span></div>
     """, unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
-# Today's actual trend — read from Hopsworks Feature Store instead of a
-# second live "history" API call, since this data already lives there once
-# the feature pipeline has run for today.
+# Feature Store recent actuals
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=1800)
 def fetch_recent_actuals_from_feature_store(lookback_hours=72):
-    """Pull the last `lookback_hours` of REAL measured rows from the Feature
-    Store. We need more than just "today" here: aqi_lag_24 / aqi_rolling_24
-    (used by whichever features the training pipeline selected) require up
-    to 24h of real history to seed the recursive forecast correctly."""
     hopsworks_key = st.secrets.get("HOPSWORKS_API_KEY", "")
     if not hopsworks_key:
         return pd.DataFrame()
@@ -228,22 +273,18 @@ def fetch_recent_actuals_from_feature_store(lookback_hours=72):
 
 
 # ---------------------------------------------------------------------------
-# Live data fetching — current conditions + forward-looking forecast.
-# This inherently CANNOT come from the feature store: Hopsworks only stores
-# what already happened, not tomorrow's weather/pollutant forecast.
+# Live data fetching
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=1800)
 def fetch_current_data():
     API_KEY = st.secrets.get("OPENWEATHER_API_KEY", "")
 
-    # ---- current pollution ----
     curr_url = (f"http://api.openweathermap.org/data/2.5/air_pollution"
                 f"?lat={LAT}&lon={LON}&appid={API_KEY}")
     curr_resp = requests.get(curr_url, timeout=15)
     curr_resp.raise_for_status()
     pollution = curr_resp.json()["list"][0]["components"]
 
-    # ---- pollutant forecast, next ~4 days hourly ----
     fc_url = (f"http://api.openweathermap.org/data/2.5/air_pollution/forecast"
               f"?lat={LAT}&lon={LON}&appid={API_KEY}")
     fc_resp = requests.get(fc_url, timeout=15)
@@ -257,7 +298,6 @@ def fetch_current_data():
     if not poll_forecast_df.empty:
         poll_forecast_df["datetime"] = poll_forecast_df["datetime"].dt.as_unit("ns")
 
-    # ---- weather: current + hourly forecast ----
     w_url = ("https://api.open-meteo.com/v1/forecast"
              f"?latitude={LAT}&longitude={LON}"
              "&current=temperature_2m,relative_humidity_2m,wind_speed_10m,surface_pressure"
@@ -314,34 +354,15 @@ def get_aqi(components):
 
 
 def aqi_info(val):
-    """Returns (category, breathe_speed_seconds, color, description). The
-    breathe speed drives the halo animation on the dashboard — calmer air,
-    slower pulse; worse air, faster pulse — so the animation itself encodes
-    severity rather than just decorating the number."""
-    if val <= 50: return "Good", "4.2s", "#3FCFB4", "Clear conditions"
-    elif val <= 100: return "Moderate", "3.6s", "#E3B23C", "Acceptable"
-    elif val <= 150: return "Unhealthy for Sensitive", "3.0s", "#E0812F", "Sensitive groups affected"
-    elif val <= 200: return "Unhealthy", "2.4s", "#D2503A", "Everyone affected"
-    elif val <= 300: return "Very Unhealthy", "1.8s", "#9457C7", "Health alert"
-    else: return "Hazardous", "1.3s", "#B23A52", "Emergency conditions"
+    if val <= 50: return "Good", "4.2s", "#10B981", "Clear conditions"
+    elif val <= 100: return "Moderate", "3.6s", "#F59E0B", "Acceptable"
+    elif val <= 150: return "Unhealthy for Sensitive", "3.0s", "#F97316", "Sensitive groups affected"
+    elif val <= 200: return "Unhealthy", "2.4s", "#EF4444", "Everyone affected"
+    elif val <= 300: return "Very Unhealthy", "1.8s", "#8B5CF6", "Health alert"
+    else: return "Hazardous", "1.3s", "#DC2626", "Emergency conditions"
 
 
 def build_forecast(feature_df, hist_lookback_df, current_aqi, current_row, feature_cols, model, scaler, hours=72):
-    """Recursively predict AQI hour-by-hour using REAL forecasted pollutant/
-    weather values for each hour (not a frozen snapshot).
-
-    Builds the FULL candidate feature set used by training_pipeline.py's
-    select_features() (raw pollutants/weather, temporal features, and
-    aqi/pm2.5 lags + rolling means), then subsets to whatever `feature_cols`
-    the currently-registered model actually needs. This has to mirror
-    training exactly — training picks its feature set dynamically via
-    correlation, so the app can't hardcode a fixed handful of columns or it
-    silently drifts out of sync with whatever model gets registered next.
-
-    aqi/pm2.5 history is seeded from real Feature Store readings (so lag_24 /
-    rolling_24 are correct for the first ~24 predicted hours) and then
-    extended with the model's own predictions as we step forward.
-    """
     df = feature_df.reset_index(drop=True)
     n = min(hours, len(df))
 
@@ -411,7 +432,7 @@ try:
     current_aqi, dominant = get_aqi(pollution)
     cat, breathe_speed, color, cat_desc = aqi_info(current_aqi)
 
-    # ---- header strip: station identity + live clock, instrument-style ----
+    # ---- Header ----
     st.markdown(f"""
     <div class='station-header'>
         <div>
@@ -422,12 +443,10 @@ try:
     </div>
     """, unsafe_allow_html=True)
 
-    # ---- hero: breathing halo. Pulse speed is set by aqi_info() itself, so
-    # worse air literally breathes faster — the one bold visual idea on this
-    # page, and it's tied to real severity rather than decorative. ----
+    # ---- Hero Halo ----
     st.markdown(f"""
     <div class='hero' style='--ring-color:{color}; --breathe-speed:{breathe_speed}'>
-        <p class='hero-eyebrow'>Current air quality index</p>
+        <p class='hero-eyebrow'>Current Air Quality Index</p>
         <div class='halo-wrap'>
             <div class='halo-ring'></div>
             <div class='halo-ring r2'></div>
@@ -440,20 +459,19 @@ try:
     </div>
     """, unsafe_allow_html=True)
 
+    # ---- Weather Chips ----
     st.markdown(f"""
     <div class='chip-row'>
         <div class='chip'><div class='chip-label'>Temperature</div><div class='chip-value'>{weather['temperature_2m']:.1f}°C</div></div>
         <div class='chip'><div class='chip-label'>Humidity</div><div class='chip-value'>{weather['relative_humidity_2m']:.0f}%</div></div>
-        <div class='chip'><div class='chip-label'>Wind speed</div><div class='chip-value'>{weather['wind_speed_10m']:.1f} km/h</div></div>
+        <div class='chip'><div class='chip-label'>Wind Speed</div><div class='chip-value'>{weather['wind_speed_10m']:.1f} km/h</div></div>
         <div class='chip'><div class='chip-label'>Pressure</div><div class='chip-value'>{weather['surface_pressure']:.0f} hPa</div></div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ---- pollutant readouts as small radial gauges — reads like a bank of
-    # sensor dials rather than a plain text list, and each one is legible
-    # on its own (value + % of the WHO-style threshold + a status word). ----
+    # ---- Pollutant Gauges ----
     st.markdown("""<div class='panel'><div class='panel-head'>
-        <p class='panel-title'>Pollutant levels</p>
+        <p class='panel-title'>Pollutant Levels</p>
         <p class='panel-sub'>% of health threshold</p>
     </div>""", unsafe_allow_html=True)
 
@@ -463,11 +481,11 @@ try:
     for p, val in show_p.items():
         pct = min(val / threshold.get(p, 100) * 100, 100)
         status = "Low" if pct < 40 else "Moderate" if pct < 70 else "High"
-        gcolor = "#3FCFB4" if pct < 40 else "#E3B23C" if pct < 70 else "#D2503A"
+        gcolor = "#10B981" if pct < 40 else "#F59E0B" if pct < 70 else "#EF4444"
         gauges += f"""
         <div class='gauge-cell'>
-            <div style='width:58px;height:58px;border-radius:50%;background:conic-gradient({gcolor} {pct:.0f}%, var(--line) {pct:.0f}% 100%);display:flex;align-items:center;justify-content:center;'>
-                <div style='width:44px;height:44px;border-radius:50%;background:var(--panel);display:flex;align-items:center;justify-content:center;'>
+            <div style='width:60px;height:60px;border-radius:50%;background:conic-gradient({gcolor} {pct:.0f}%, var(--white-3) {pct:.0f}% 100%);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);'>
+                <div style='width:46px;height:46px;border-radius:50%;background:var(--white);display:flex;align-items:center;justify-content:center;'>
                     <span class='gauge-val' style='color:{gcolor}'>{val:.0f}</span>
                 </div>
             </div>
@@ -478,10 +496,9 @@ try:
     st.markdown(gauges, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ---- Today's Trend: REAL measured data from the Feature Store
-    # (midnight -> now) + model forecast for the remaining hours of today. ----
+    # ---- Today's Trend ----
     st.markdown("""<div class='panel'><div class='panel-head'>
-        <p class='panel-title'>Today's AQI trend</p>
+        <p class='panel-title'>Today's AQI Trend</p>
         <p class='panel-sub'>Measured · Predicted</p>
     </div>""", unsafe_allow_html=True)
     try:
@@ -504,34 +521,34 @@ try:
             st.warning("No trend data available right now — Feature Store may not have today's data yet, or the API may be rate-limited.")
         else:
             fig, ax = plt.subplots(figsize=(12, 4.6))
-            fig.patch.set_facecolor("#121826")
-            ax.set_facecolor("#121826")
+            fig.patch.set_facecolor("#FFFFFF")
+            ax.set_facecolor("#FAFBFC")
             day_start_plot = now_karachi.replace(hour=0, minute=0, second=0, microsecond=0)
             day_end_plot = now_karachi.replace(hour=23, minute=59, second=0, microsecond=0)
-            ax.fill_between([day_start_plot, day_end_plot], 0, 50, alpha=0.10, color="#3FCFB4")
-            ax.fill_between([day_start_plot, day_end_plot], 50, 100, alpha=0.10, color="#E3B23C")
-            ax.fill_between([day_start_plot, day_end_plot], 100, 150, alpha=0.10, color="#E0812F")
-            ax.fill_between([day_start_plot, day_end_plot], 150, 200, alpha=0.10, color="#D2503A")
+            ax.fill_between([day_start_plot, day_end_plot], 0, 50, alpha=0.08, color="#10B981")
+            ax.fill_between([day_start_plot, day_end_plot], 50, 100, alpha=0.08, color="#F59E0B")
+            ax.fill_between([day_start_plot, day_end_plot], 100, 150, alpha=0.08, color="#F97316")
+            ax.fill_between([day_start_plot, day_end_plot], 150, 200, alpha=0.08, color="#EF4444")
 
             all_vals = []
             if not hist_df.empty:
                 ax.plot(hist_df["datetime"], hist_df["aqi"], color=color, linewidth=2.5, label="Actual (measured)", zorder=5)
                 all_vals += hist_df["aqi"].tolist()
             if future_times:
-                ax.plot(future_times, future_preds, color=color, linewidth=2, linestyle="--", alpha=0.75, label="Predicted", zorder=5)
+                ax.plot(future_times, future_preds, color=color, linewidth=2, linestyle="--", alpha=0.7, label="Predicted", zorder=5)
                 all_vals += future_preds
 
-            ax.scatter([now_karachi], [current_aqi], color=color, s=110, zorder=6, edgecolors="#ECEEF3", linewidths=2, label="Now")
-            ax.axhline(current_aqi, color="#ECEEF3", linestyle="--", alpha=0.25, linewidth=1)
-            ax.set_ylabel("AQI", color="#8891A6", fontsize=11, fontfamily="monospace")
+            ax.scatter([now_karachi], [current_aqi], color=color, s=110, zorder=6, edgecolors="#FFFFFF", linewidths=2.5, label="Now")
+            ax.axhline(current_aqi, color="#9CA3AF", linestyle="--", alpha=0.35, linewidth=1)
+            ax.set_ylabel("AQI", color="#6B7280", fontsize=11, fontfamily="sans-serif", fontweight=500)
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%I %p", tz=KARACHI_TZ))
-            ax.grid(True, alpha=0.12, color="#8891A6")
-            ax.tick_params(colors="#8891A6", labelsize=9)
+            ax.grid(True, alpha=0.15, color="#D1D5DE", linestyle="-")
+            ax.tick_params(colors="#6B7280", labelsize=9)
             for label in ax.get_xticklabels() + ax.get_yticklabels():
-                label.set_fontfamily("monospace")
+                label.set_fontfamily("sans-serif")
             for spine in ax.spines.values():
-                spine.set_color("#232B3D")
-            ax.legend(facecolor="#121826", edgecolor="#232B3D", labelcolor="#ECEEF3", fontsize=9, loc="upper right")
+                spine.set_color("#E2E6ED")
+            ax.legend(facecolor="#FFFFFF", edgecolor="#E2E6ED", labelcolor="#374151", fontsize=9, loc="upper right", framealpha=0.95)
             if all_vals:
                 ax.set_ylim(max(0, min(all_vals) - 10), max(all_vals) + 10)
             plt.tight_layout()
@@ -541,11 +558,9 @@ try:
         st.warning(f"Trend: {e}")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ---- 3-Day Forecast: recursive model prediction using REAL forecasted
-    # pollutant + weather values per hour. Necessarily live-API-based, since
-    # the feature store only holds data that has already happened. ----
+    # ---- 3-Day Forecast ----
     st.markdown("""<div class='panel'><div class='panel-head'>
-        <p class='panel-title'>3-day forecast</p>
+        <p class='panel-title'>3-Day Forecast</p>
         <p class='panel-sub'>Recursive hourly model</p>
     </div>""", unsafe_allow_html=True)
     try:
@@ -574,7 +589,7 @@ try:
                     day_date_label = pd.Timestamp(day).strftime("%d %b · %A")
                     with day_cols[d]:
                         st.markdown(f"""
-                        <div class='day-tile' style='border-color:{day_color}40'>
+                        <div class='day-tile' style='border-color:{day_color}30'>
                             <p class='d-label'>{day_date_label}</p>
                             <p class='d-val' style='color:{day_color}'>{day_avg:.0f}</p>
                             <p class='d-cat' style='color:{day_color}'>{day_cat}</p>
@@ -583,30 +598,30 @@ try:
                         """, unsafe_allow_html=True)
 
                 fig, ax = plt.subplots(figsize=(14, 2.8))
-                fig.patch.set_facecolor("#121826")
-                ax.set_facecolor("#121826")
-                ax.plot(fdf["datetime"], fdf["aqi"], color=color, linewidth=1.5)
-                ax.fill_between(fdf["datetime"], fdf["aqi"] - 3, fdf["aqi"] + 3, alpha=0.15, color=color)
-                ax.axhline(100, color="#E3B23C", linestyle="--", alpha=0.4, linewidth=0.8)
-                ax.axhline(150, color="#E0812F", linestyle="--", alpha=0.4, linewidth=0.8)
-                ax.set_ylabel("AQI", color="#8891A6", fontsize=10, fontfamily="monospace")
+                fig.patch.set_facecolor("#FFFFFF")
+                ax.set_facecolor("#FAFBFC")
+                ax.plot(fdf["datetime"], fdf["aqi"], color=color, linewidth=1.8)
+                ax.fill_between(fdf["datetime"], fdf["aqi"] - 3, fdf["aqi"] + 3, alpha=0.1, color=color)
+                ax.axhline(100, color="#F59E0B", linestyle="--", alpha=0.5, linewidth=0.8)
+                ax.axhline(150, color="#F97316", linestyle="--", alpha=0.5, linewidth=0.8)
+                ax.set_ylabel("AQI", color="#6B7280", fontsize=10, fontfamily="sans-serif", fontweight=500)
                 ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d", tz=KARACHI_TZ))
-                ax.grid(True, alpha=0.1, color="#8891A6")
-                ax.tick_params(colors="#8891A6", labelsize=8)
+                ax.grid(True, alpha=0.15, color="#D1D5DE", linestyle="-")
+                ax.tick_params(colors="#6B7280", labelsize=8)
                 for label in ax.get_xticklabels() + ax.get_yticklabels():
-                    label.set_fontfamily("monospace")
+                    label.set_fontfamily("sans-serif")
                 for spine in ax.spines.values():
-                    spine.set_color("#232B3D")
+                    spine.set_color("#E2E6ED")
                 plt.tight_layout()
                 st.pyplot(fig)
                 plt.close(fig)
 
                 if any(a > 150 for a in forecast_aqi):
-                    guide_color, guide_title, guide_body = "#D2503A", "Hazardous AQI expected", "Avoid outdoor activity over the next 3 days where possible."
+                    guide_color, guide_title, guide_body = "#EF4444", "Hazardous AQI expected", "Avoid outdoor activity over the next 3 days where possible."
                 elif any(a > 100 for a in forecast_aqi):
-                    guide_color, guide_title, guide_body = "#E3B23C", "Unhealthy AQI expected", "Sensitive groups should limit prolonged time outdoors."
+                    guide_color, guide_title, guide_body = "#F59E0B", "Elevated AQI expected", "Sensitive groups should limit prolonged time outdoors."
                 else:
-                    guide_color, guide_title, guide_body = "#3FCFB4", "Within safe range", "No elevated AQI expected in the next 3 days."
+                    guide_color, guide_title, guide_body = "#10B981", "Within safe range", "No elevated AQI expected in the next 3 days."
                 st.markdown(f"""
                 <div class='guidance' style='--gl-color:{guide_color}'>
                     <span class='g-dot'></span>
@@ -616,13 +631,14 @@ try:
         st.error(f"Forecast error: {e}")
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # ---- Current Guidance ----
     tips = {
-        "Good": ("Excellent air quality — perfect for outdoor activity.", "#3FCFB4"),
-        "Moderate": ("Acceptable. Sensitive people should limit prolonged outdoor exertion.", "#E3B23C"),
-        "Unhealthy for Sensitive": ("Sensitive groups should reduce outdoor activity.", "#E0812F"),
-        "Unhealthy": ("Reduce outdoor physical activity for everyone.", "#D2503A"),
-        "Very Unhealthy": ("Avoid outdoors — use air purifiers indoors.", "#9457C7"),
-        "Hazardous": ("Emergency conditions. Stay indoors and seek medical help if needed.", "#B23A52"),
+        "Good": ("Excellent air quality — perfect for outdoor activity.", "#10B981"),
+        "Moderate": ("Acceptable. Sensitive people should limit prolonged outdoor exertion.", "#F59E0B"),
+        "Unhealthy for Sensitive": ("Sensitive groups should reduce outdoor activity.", "#F97316"),
+        "Unhealthy": ("Reduce outdoor physical activity for everyone.", "#EF4444"),
+        "Very Unhealthy": ("Avoid outdoors — use air purifiers indoors.", "#8B5CF6"),
+        "Hazardous": ("Emergency conditions. Stay indoors and seek medical help if needed.", "#DC2626"),
     }
     tip_body, tip_color = tips.get(cat, ("", color))
     st.markdown(f"""
