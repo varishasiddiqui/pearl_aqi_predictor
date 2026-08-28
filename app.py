@@ -52,7 +52,7 @@ def load_model():
             import hopsworks
             project = hopsworks.login(api_key_value=hopsworks_key)
             mr = project.get_model_registry()
-            registry_model = mr.get_model(MODEL_NAME)  # latest version
+            registry_model = mr.get_best_model(MODEL_NAME, "rmse", "min")
             model_dir = registry_model.download()
             import os
             model = joblib.load(os.path.join(model_dir, "best_model.pkl"))
