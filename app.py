@@ -9,6 +9,9 @@ import matplotlib.dates as mdates
 
 KARACHI_TZ = timezone(timedelta(hours=5))
 LAT, LON = 24.8607, 67.0011
+FEATURE_GROUP_NAME = "aqi_features_karachi"
+FEATURE_GROUP_VERSION = 1
+MODEL_NAME = "aqi_predictor_karachi"
 
 # Use pandas-native tz-aware timestamps everywhere (NOT raw python datetime.datetime
 # objects). Mixing raw datetime objects with matplotlib/pandas across a Streamlit
@@ -37,11 +40,33 @@ st.markdown("""<style>
 st.set_page_config(page_title="Pearls AQI Predictor", layout="wide", initial_sidebar_state="expanded")
 
 
+# ---------------------------------------------------------------------------
+# Model loading — Hopsworks Model Registry first, local .pkl as fallback
+# (so the dashboard still works if Hopsworks is briefly unreachable).
+# ---------------------------------------------------------------------------
 @st.cache_resource
 def load_model():
-    model = joblib.load("best_model_ridge.pkl")
+    hopsworks_key = st.secrets.get("HOPSWORKS_API_KEY", "")
+    if hopsworks_key:
+        try:
+            import hopsworks
+            project = hopsworks.login(api_key_value=hopsworks_key)
+            mr = project.get_model_registry()
+            registry_model = mr.get_model(MODEL_NAME)  # latest version
+            model_dir = registry_model.download()
+            import os
+            model = joblib.load(os.path.join(model_dir, "best_model.pkl"))
+            scaler = joblib.load(os.path.join(model_dir, "scaler.pkl"))
+            features = joblib.load(os.path.join(model_dir, "feature_cols.pkl"))
+            st.session_state["model_source"] = f"Hopsworks Model Registry (v{registry_model.version})"
+            return model, scaler, features
+        except Exception as e:
+            st.sidebar.warning(f"Couldn't load from Hopsworks Model Registry, using local files instead. ({e})")
+
+    model = joblib.load("best_model.pkl")
     scaler = joblib.load("scaler.pkl")
     features = joblib.load("feature_cols.pkl")
+    st.session_state["model_source"] = "local file (fallback)"
     return model, scaler, features
 
 
@@ -52,22 +77,50 @@ with st.sidebar:
     city_label = st.selectbox("City", ["Karachi"], label_visibility="collapsed")
     st.markdown("---")
     st.markdown("### 📊 Model Info")
-    st.markdown("- **Model:** Ridge Regression")
-    st.markdown("- **RMSE:** 5.29")
-    st.markdown("- **MAE:** 4.39")
-    st.markdown("- **Features:** 9 selected")
+    st.markdown(f"- **Source:** {st.session_state.get('model_source', 'unknown')}")
+    st.markdown(f"- **Features:** {len(feature_cols)} selected")
     st.markdown("---")
     st.markdown("### 🔗 Data Sources")
-    st.markdown("- OpenWeather API (current / forecast / history)")
-    st.markdown("- Open-Meteo API")
-    st.markdown("- Hopsworks Feature Store")
+    st.markdown("- OpenWeather API (current / forecast)")
+    st.markdown("- Open-Meteo API (weather forecast)")
+    st.markdown("- Hopsworks Feature Store (today's actual trend)")
+    st.markdown("- Hopsworks Model Registry (model)")
     st.markdown("---")
     st.markdown(f"**Timezone:** UTC+5 (PKT)")
     st.markdown(f"**Refreshed:** {now_karachi.strftime('%H:%M:%S')}")
 
 
 # ---------------------------------------------------------------------------
-# Data fetching
+# Today's actual trend — read from Hopsworks Feature Store instead of a
+# second live "history" API call, since this data already lives there once
+# the feature pipeline has run for today.
+# ---------------------------------------------------------------------------
+@st.cache_data(ttl=1800)
+def fetch_today_actuals_from_feature_store():
+    hopsworks_key = st.secrets.get("HOPSWORKS_API_KEY", "")
+    if not hopsworks_key:
+        return pd.DataFrame()
+    try:
+        import hopsworks
+        project = hopsworks.login(api_key_value=hopsworks_key)
+        fs = project.get_feature_store()
+        fg = fs.get_feature_group(name=FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
+        df = fg.read()
+        if df.empty:
+            return df
+        df["datetime"] = pd.to_datetime(df["datetime"]).dt.tz_convert(KARACHI_TZ)
+        today_start = now_karachi.normalize()
+        df = df[(df["datetime"] >= today_start) & (df["datetime"] <= now_karachi)]
+        return df.sort_values("datetime").reset_index(drop=True)
+    except Exception as e:
+        st.sidebar.warning(f"Feature Store read failed, today's trend may be incomplete. ({e})")
+        return pd.DataFrame()
+
+
+# ---------------------------------------------------------------------------
+# Live data fetching — current conditions + forward-looking forecast.
+# This inherently CANNOT come from the feature store: Hopsworks only stores
+# what already happened, not tomorrow's weather/pollutant forecast.
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=1800)
 def fetch_current_data():
@@ -80,8 +133,7 @@ def fetch_current_data():
     curr_resp.raise_for_status()
     pollution = curr_resp.json()["list"][0]["components"]
 
-    # ---- pollutant forecast, next ~4 days hourly (real OpenWeather forecast,
-    # NOT frozen at today's values like the old version) ----
+    # ---- pollutant forecast, next ~4 days hourly ----
     fc_url = (f"http://api.openweathermap.org/data/2.5/air_pollution/forecast"
               f"?lat={LAT}&lon={LON}&appid={API_KEY}")
     fc_resp = requests.get(fc_url, timeout=15)
@@ -93,31 +145,7 @@ def fetch_current_data():
         for item in fc_list
     ])
     if not poll_forecast_df.empty:
-        # Normalize resolution (unix-second timestamps parse as datetime64[s],
-        # which pd.merge_asof refuses to match against other resolutions).
         poll_forecast_df["datetime"] = poll_forecast_df["datetime"].dt.as_unit("ns")
-
-    # ---- actual measured pollution history for today so far (midnight -> now),
-    # used to draw a REAL "today's trend" instead of a fabricated curve ----
-    start_utc = now_karachi.normalize().tz_convert("UTC")
-    end_utc = now_karachi.tz_convert("UTC")
-    hist_df = pd.DataFrame()
-    try:
-        hist_url = (f"http://api.openweathermap.org/data/2.5/air_pollution/history"
-                    f"?lat={LAT}&lon={LON}&start={int(start_utc.timestamp())}"
-                    f"&end={int(end_utc.timestamp())}&appid={API_KEY}")
-        hist_resp = requests.get(hist_url, timeout=15)
-        hist_resp.raise_for_status()
-        hist_list = hist_resp.json().get("list", [])
-        if hist_list:
-            hist_df = pd.DataFrame([
-                {"datetime": pd.to_datetime(item["dt"], unit="s", utc=True).tz_convert(KARACHI_TZ),
-                 **item["components"]}
-                for item in hist_list
-            ])
-            hist_df["datetime"] = hist_df["datetime"].dt.as_unit("ns")
-    except requests.RequestException:
-        hist_df = pd.DataFrame()
 
     # ---- weather: current + hourly forecast ----
     w_url = ("https://api.open-meteo.com/v1/forecast"
@@ -131,8 +159,6 @@ def fetch_current_data():
     weather = w_data["current"]
     hourly = w_data["hourly"]
 
-    # Open-Meteo returns naive local-clock strings in UTC by default (no
-    # timezone param passed) -> parse as UTC, then convert to Karachi tz.
     hourly_times = pd.to_datetime(hourly["time"]).tz_localize("UTC").tz_convert(KARACHI_TZ).as_unit("ns")
     hourly_df = pd.DataFrame({
         "datetime": hourly_times,
@@ -142,10 +168,6 @@ def fetch_current_data():
         "pressure": hourly["surface_pressure"],
     })
 
-    # Merge pollutant forecast with weather forecast on nearest hour so every
-    # future timestamp carries BOTH real forecasted pollutants AND real
-    # forecasted weather (fixes the old bug where these were frozen at
-    # today's snapshot for the full 72 hours).
     combined_df = pd.DataFrame()
     if not poll_forecast_df.empty:
         combined_df = pd.merge_asof(
@@ -154,7 +176,7 @@ def fetch_current_data():
             on="datetime", direction="nearest", tolerance=pd.Timedelta("30min"),
         ).dropna(subset=["temperature"])
 
-    return pollution, weather, hist_df, combined_df
+    return pollution, weather, combined_df
 
 
 BREAKPOINTS = {
@@ -220,7 +242,8 @@ def build_forecast(feature_df, current_aqi, feature_cols, model, scaler, hours=7
 
 
 try:
-    pollution, weather, hist_df, combined_df = fetch_current_data()
+    pollution, weather, combined_df = fetch_current_data()
+    hist_df = fetch_today_actuals_from_feature_store()
     current_aqi, dominant = get_aqi(pollution)
     cat, emoji, color, glow = aqi_info(current_aqi)
 
@@ -264,13 +287,12 @@ try:
 
     st.divider()
 
-    # ---- Today's Trend: REAL measured data (midnight -> now) + model
-    # forecast for the remaining hours of today. No fabricated noise. ----
+    # ---- Today's Trend: REAL measured data from the Feature Store
+    # (midnight -> now) + model forecast for the remaining hours of today. ----
     st.subheader("📈 Today's AQI Trend")
     try:
         if not hist_df.empty:
             hist_df = hist_df.copy()
-            hist_df["aqi"] = hist_df.apply(lambda r: get_aqi(r)[0], axis=1)
             hist_df = hist_df.sort_values("datetime")
 
         today_end = now_karachi.replace(hour=23, minute=59, second=59, microsecond=0)
@@ -285,7 +307,7 @@ try:
                 )
 
         if hist_df.empty and not future_times:
-            st.warning("No trend data available right now — API may be rate-limited or unavailable.")
+            st.warning("No trend data available right now — Feature Store may not have today's data yet, or the API may be rate-limited.")
         else:
             fig, ax = plt.subplots(figsize=(12, 5))
             fig.patch.set_facecolor("#0e1117")
@@ -325,7 +347,8 @@ try:
     st.divider()
 
     # ---- 3-Day Forecast: recursive model prediction using REAL forecasted
-    # pollutant + weather values per hour (fixes the frozen-feature bug) ----
+    # pollutant + weather values per hour. Necessarily live-API-based, since
+    # the feature store only holds data that has already happened. ----
     st.subheader("📅 3-Day Forecast")
     try:
         if combined_df.empty:
@@ -399,4 +422,4 @@ except Exception as e:
     st.error(f"Error: {e}")
 
 st.divider()
-st.markdown("<p style='text-align:center;color:gray;font-size:11px'>Pearls AQI Predictor | MLOps Project | Ridge Regression (RMSE 5.29) | Hopsworks Feature Store</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;color:gray;font-size:11px'>Pearls AQI Predictor | MLOps Project | Hopsworks Feature Store + Model Registry</p>", unsafe_allow_html=True)
