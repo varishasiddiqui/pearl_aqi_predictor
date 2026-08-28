@@ -1,0 +1,8 @@
+hopsworks
+shap
+scikit-learn
+tensorflow
+pandas>=2.0
+numpy
+requests
+joblib
