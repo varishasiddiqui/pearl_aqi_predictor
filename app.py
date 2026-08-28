@@ -202,24 +202,21 @@ def load_model():
                     model = joblib.load(os.path.join(model_dir, "best_model.pkl"))
                     scaler = joblib.load(os.path.join(model_dir, "scaler.pkl"))
                     features = joblib.load(os.path.join(model_dir, "feature_cols.pkl"))
-                    st.session_state["model_source"] = f"Hopsworks v{registry_model.version}"
-                    return model, scaler, features
+                    return model, scaler, features, f"Hopsworks v{registry_model.version}"
                 except Exception as version_err:
                     last_error = version_err
                     continue
             raise last_error
         except Exception as e:
-            st.session_state["model_source"] = "local fallback"
             st.warning(f"Using local model. ({e})")
 
     model = joblib.load("best_model.pkl")
     scaler = joblib.load("scaler.pkl")
     features = joblib.load("feature_cols.pkl")
-    st.session_state["model_source"] = "local fallback"
-    return model, scaler, features
+    return model, scaler, features, "local fallback"
 
 
-model, scaler, feature_cols = load_model()
+model, scaler, feature_cols, model_source = load_model()
 
 _has_ow = bool(st.secrets.get("OPENWEATHER_API_KEY", ""))
 _has_hw = bool(st.secrets.get("HOPSWORKS_API_KEY", ""))
@@ -387,7 +384,7 @@ try:
     current_aqi, dominant = get_aqi(pollution)
     cat, breathe_speed, color, cat_desc = aqi_info(current_aqi)
 
-    # ===== TOP BAR: brand + all info in one line =====
+    # ===== TOP BAR =====
     st.markdown(f"""
     <div class='top-bar'>
         <div class='top-bar-left'>
@@ -395,7 +392,7 @@ try:
             <span class='tag'>Karachi 24.86°N</span>
             <span class='tag'><span class='tag-dot {"tag-dot-on" if _has_ow else "tag-dot-off"}'></span>OpenWeather</span>
             <span class='tag'><span class='tag-dot {"tag-dot-on" if _has_hw else "tag-dot-off"}'></span>Hopsworks</span>
-            <span class='tag'>Model: {st.session_state.get("model_source", "—")}</span>
+            <span class='tag'>Model: {model_source}</span>
             <span class='tag'>{len(feature_cols)} features</span>
         </div>
         <div class='top-bar-right'>
@@ -404,7 +401,7 @@ try:
     </div>
     """, unsafe_allow_html=True)
 
-    # ===== HERO ROW: AQI card + 4 weather cards side by side =====
+    # ===== HERO ROW =====
     st.markdown(f"""
     <div class='hero-row'>
         <div class='hero-card' style='--accent:{color}; --breathe-speed:{breathe_speed}'>
