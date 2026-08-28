@@ -34,16 +34,57 @@ st.markdown("""<style>
 
     html, body, [class*="st-"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
     .stApp { background: var(--bg) !important; }
-    .block-container { padding-top: 1.5rem; padding-bottom: 3rem; max-width: 1180px; }
+    .block-container { padding-top: 2.5rem; padding-bottom: 3rem; max-width: 1180px; }
     h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; color: var(--ink) !important; letter-spacing: -0.02em; }
     p, span, label, div { color: var(--ink-2); }
     .mono { font-family: 'JetBrains Mono', monospace !important; }
+
+    /* ===== FIX: Hide "keyboard_double" sidebar toggle text ===== */
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stSidebarCollapsedControl"] div,
+    [data-testid="stSidebarCollapsedControl"] span,
+    [data-testid="stSidebarCollapsedControl"] p,
+    button[kind="header"] span,
+    button[kind="header"] div {
+        font-size: 0 !important;
+        color: transparent !important;
+        line-height: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+    [data-testid="stSidebarCollapsedControl"] {
+        display: none !important;
+    }
+
+    /* ===== FIX: Hide Streamlit's default top toolbar menu text ===== */
+    .stApp header,
+    [data-testid="stToolbar"] {
+        visibility: hidden !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+    }
+    [data-testid="stHeader"] {
+        height: 0 !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* ===== FIX: Remove top gap so header is fully visible ===== */
+    .stApp > div > div > div {
+        padding-top: 0 !important;
+    }
 
     /* ---- Sidebar ---- */
     section[data-testid="stSidebar"] {
         background: var(--white) !important;
         border-right: 1px solid var(--border);
         box-shadow: 2px 0 8px rgba(0,0,0,0.03);
+        margin-top: 0 !important;
+        padding-top: 2rem !important;
     }
     section[data-testid="stSidebar"] * { color: var(--ink-2) !important; }
     section[data-testid="stSidebar"] hr { border-color: var(--border) !important; }
@@ -76,7 +117,7 @@ st.markdown("""<style>
     /* ---- Header Strip ---- */
     .station-header {
         display:flex; align-items:center; justify-content:space-between;
-        padding:8px 0 20px; border-bottom:1px solid var(--border); margin-bottom:20px;
+        padding:12px 0 20px; border-bottom:1px solid var(--border); margin-bottom:20px;
         flex-wrap:wrap; gap:10px;
     }
     .station-id { font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--ink-4); letter-spacing:0.1em; font-weight:500; }
@@ -163,10 +204,6 @@ st.markdown("""<style>
         font-family:'JetBrains Mono',monospace; font-size:10px;
         letter-spacing:0.06em; margin-top:10px; font-weight:500;
     }
-
-    /* ---- Streamlit native overrides for light theme ---- */
-    .stSelectbox > div > div { background-color: var(--white-2) !important; border-color: var(--border) !important; }
-    div[data-testid="stSidebar"] .stSelectbox label { color: var(--ink-3) !important; }
 </style>""", unsafe_allow_html=True)
 
 
@@ -211,11 +248,10 @@ def load_model():
 
 model, scaler, feature_cols = load_model()
 
-with st.sidebar:
-    st.markdown("<p class='panel-title' style='font-size:14px;margin-bottom:16px'>⚙️ Station Settings</p>", unsafe_allow_html=True)
-    city_label = st.selectbox("City", ["Karachi"], label_visibility="collapsed")
+city_label = "Karachi"
 
-    st.markdown("<p class='diag-label' style='margin-top:24px'>Model</p>", unsafe_allow_html=True)
+with st.sidebar:
+    st.markdown("<p class='diag-label' style='margin-top:8px'>Model</p>", unsafe_allow_html=True)
     st.markdown(f"""
         <div class='diag-row'>· source&nbsp;&nbsp;<span style='color:var(--ink-3)'>{st.session_state.get('model_source', 'unknown')}</span></div>
         <div class='diag-row'>· inputs&nbsp;&nbsp;<span style='color:var(--ink-3)'>{len(feature_cols)} features</span></div>
