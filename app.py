@@ -34,48 +34,51 @@ st.markdown("""<style>
 
     html, body, [class*="st-"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
     .stApp { background: var(--bg) !important; }
-    .block-container { padding-top: 2.5rem; padding-bottom: 3rem; max-width: 1180px; }
+    .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1180px; }
     h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; color: var(--ink) !important; letter-spacing: -0.02em; }
     p, span, label, div { color: var(--ink-2); }
     .mono { font-family: 'JetBrains Mono', monospace !important; }
 
-    /* ===== FIX: Hide "keyboard_double" sidebar toggle text ===== */
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="stSidebarCollapsedControl"] div,
-    [data-testid="stSidebarCollapsedControl"] span,
-    [data-testid="stSidebarCollapsedControl"] p,
-    button[kind="header"] span,
-    button[kind="header"] div {
-        font-size: 0 !important;
-        color: transparent !important;
-        line-height: 0 !important;
+    /* ========== KILL "keyboard_double" — nuke entire Streamlit header bar ========== */
+    .stApp > header,
+    .stApp > div > div > header,
+    .stApp > div > div > div > header,
+    header[data-testid="stHeader"],
+    [data-testid="stToolbar"],
+    .stApp [data-testid="stHeader"] {
+        display: none !important;
         height: 0 !important;
+        min-height: 0 !important;
+        max-height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
         overflow: hidden !important;
+        border: none !important;
+        visibility: hidden !important;
     }
+
+    /* Sidebar pe bhi agar koi toggle button hai */
+    section[data-testid="stSidebar"] button[kind="header"],
+    section[data-testid="stSidebar"] > div > div > button,
+    button[kind="header"],
     [data-testid="stSidebarCollapsedControl"] {
         display: none !important;
-    }
-
-    /* ===== FIX: Hide Streamlit's default top toolbar menu text ===== */
-    .stApp header,
-    [data-testid="stToolbar"] {
-        visibility: hidden !important;
         height: 0 !important;
-        min-height: 0 !important;
+        width: 0 !important;
         padding: 0 !important;
         margin: 0 !important;
+        border: none !important;
         overflow: hidden !important;
-    }
-    [data-testid="stHeader"] {
-        height: 0 !important;
-        min-height: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
+        font-size: 0 !important;
+        color: transparent !important;
+        visibility: hidden !important;
     }
 
-    /* ===== FIX: Remove top gap so header is fully visible ===== */
-    .stApp > div > div > div {
+    /* Top spacing adjust — header hataya toh gap na rahe */
+    .stApp > div > div > div > div > div,
+    .stApp > div > div > div > div {
         padding-top: 0 !important;
+        margin-top: 0 !important;
     }
 
     /* ---- Sidebar ---- */
@@ -84,7 +87,7 @@ st.markdown("""<style>
         border-right: 1px solid var(--border);
         box-shadow: 2px 0 8px rgba(0,0,0,0.03);
         margin-top: 0 !important;
-        padding-top: 2rem !important;
+        padding-top: 1.5rem !important;
     }
     section[data-testid="stSidebar"] * { color: var(--ink-2) !important; }
     section[data-testid="stSidebar"] hr { border-color: var(--border) !important; }
@@ -481,7 +484,7 @@ try:
 
     # ---- Hero Halo ----
     st.markdown(f"""
-    <div class='hero' style='--ring-color:{color}; --breathe-speed:{breathe_speed}'>
+    <div class='hero' style='--ring-color:{color}; --breathe-speed:{breathe-speed}'>
         <p class='hero-eyebrow'>Current Air Quality Index</p>
         <div class='halo-wrap'>
             <div class='halo-ring'></div>
