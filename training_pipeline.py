@@ -1,20 +1,4 @@
-"""
-Training Pipeline — Pearl AQI Predictor
-Reads engineered features from the Hopsworks Feature Store, trains/evaluates
-Ridge, RandomForest, and LSTM models, picks the best one, refits it on all
-available data, and registers it in the Hopsworks Model Registry.
 
-Run:
-  python training_pipeline.py
-
-Required environment variables:
-  HOPSWORKS_API_KEY
-
-Outputs (written to the working directory, used by app.py):
-  best_model.pkl (or best_model.keras for LSTM)
-  scaler.pkl
-  feature_cols.pkl
-"""
 
 import os
 
@@ -185,16 +169,19 @@ def train_and_evaluate(df, feature_cols):
 
 
 def refit_and_save(best_model_name, X, y, feature_cols):
+    model_dir = "model_dir"
+    os.makedirs(model_dir, exist_ok=True)
+
     final_scaler = StandardScaler().fit(X)
     X_all_scaled = final_scaler.transform(X)
 
     if best_model_name == "Ridge":
         deployment_model = Ridge(alpha=100.0).fit(X_all_scaled, y)
-        model_file = "best_model.pkl"
+        model_file = os.path.join(model_dir, "best_model.pkl")
         joblib.dump(deployment_model, model_file)
     elif best_model_name == "RandomForest":
         deployment_model = RandomForestRegressor(n_estimators=200, max_depth=10, random_state=42).fit(X, y)
-        model_file = "best_model.pkl"
+        model_file = os.path.join(model_dir, "best_model.pkl")
         joblib.dump(deployment_model, model_file)
     else:  # LSTM
         from tensorflow.keras.layers import LSTM, Dense, Dropout
@@ -209,16 +196,17 @@ def refit_and_save(best_model_name, X, y, feature_cols):
         ])
         deployment_model.compile(optimizer="adam", loss="mse")
         deployment_model.fit(X_all_lstm, y_all_lstm, epochs=30, batch_size=16, verbose=0)
-        model_file = "best_model.keras"
+        model_file = os.path.join(model_dir, "best_model.keras")
         deployment_model.save(model_file)
 
-    joblib.dump(final_scaler, "scaler.pkl")
-    joblib.dump(feature_cols, "feature_cols.pkl")
-    print(f"Saved deployment artifacts for {best_model_name} -> {model_file}, scaler.pkl, feature_cols.pkl")
-    return model_file
+    joblib.dump(final_scaler, os.path.join(model_dir, "scaler.pkl"))
+    joblib.dump(feature_cols, os.path.join(model_dir, "feature_cols.pkl"))
+    print(f"Saved deployment artifacts for {best_model_name} in {model_dir}/ -> "
+          f"{os.path.basename(model_file)}, scaler.pkl, feature_cols.pkl")
+    return model_dir
 
 
-def register_model(project, model_file, best_model_name, results_table, feature_cols):
+def register_model(project, model_dir, best_model_name, results_table, feature_cols):
     mr = project.get_model_registry()
 
     final_rmse = results_table.loc[results_table["Model"] == best_model_name, "RMSE"].values[0]
@@ -233,7 +221,10 @@ def register_model(project, model_file, best_model_name, results_table, feature_
             f"{len(feature_cols)} correlation-selected features"
         ),
     )
-    aqi_model.save(model_file)
+    # Register the WHOLE folder (model + scaler + feature_cols), not just the
+    # model file on its own — app.py's load_model() downloads this folder and
+    # expects all three files to be inside it.
+    aqi_model.save(model_dir)
     print(f"Model registered in Hopsworks Model Registry (RMSE={final_rmse:.2f}, MAE={final_mae:.2f}, R2={final_r2:.3f}).")
 
 
@@ -250,8 +241,8 @@ def main():
             "rather than tuning models further. Proceeding to save/register anyway."
         )
 
-    model_file = refit_and_save(best_model_name, X, y, feature_cols)
-    register_model(project, model_file, best_model_name, results_table, feature_cols)
+    model_dir = refit_and_save(best_model_name, X, y, feature_cols)
+    register_model(project, model_dir, best_model_name, results_table, feature_cols)
 
 
 if __name__ == "__main__":
