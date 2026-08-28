@@ -15,7 +15,7 @@ MODEL_NAME = "aqi_predictor_karachi"
 
 now_karachi = pd.Timestamp.now(tz="UTC").tz_convert(KARACHI_TZ)
 
-st.set_page_config(page_title="Pearl · AQI Station Karachi", layout="wide", page_icon="🫁")
+st.set_page_config(page_title="Pearl · AQI Station Karachi", layout="wide", page_icon="🌆")
 
 st.markdown("""<style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -391,7 +391,7 @@ try:
     st.markdown(f"""
     <div class='top-bar'>
         <div class='top-bar-left'>
-            <span class='brand'>🫁 Pearl AQI</span>
+            <span class='brand'>Pearl AQI</span>
             <span class='tag'>Karachi 24.86°N</span>
             <span class='tag'><span class='tag-dot {"tag-dot-on" if _has_ow else "tag-dot-off"}'></span>OpenWeather</span>
             <span class='tag'><span class='tag-dot {"tag-dot-on" if _has_hw else "tag-dot-off"}'></span>Hopsworks</span>
