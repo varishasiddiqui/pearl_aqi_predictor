@@ -443,7 +443,6 @@ try:
     # ===== POLLUTANT GAUGES =====
     st.markdown("""<div class='panel'><div class='panel-head'>
         <p class='panel-title'>Pollutant Levels</p>
-        <p class='panel-sub'>% of threshold</p>
     </div>""", unsafe_allow_html=True)
     show_p = {k: v for k, v in pollution.items() if k not in ["no", "nh3"]}
     threshold = {"pm2_5": 75, "pm10": 150, "no2": 100, "so2": 75, "o3": 70, "co": 10000}
