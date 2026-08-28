@@ -1,9 +1,9 @@
 streamlit
-scikit-learn
-pandas
-numpy
+scikit-learn<1.7
+pandas<3
+numpy<2
 matplotlib
 seaborn
 requests
 joblib
-hopsworks
+hopsworks[python]>=4.0,<5.0
