@@ -39,46 +39,42 @@ st.markdown("""<style>
     p, span, label, div { color: var(--ink-2); }
     .mono { font-family: 'JetBrains Mono', monospace !important; }
 
-    /* ========== KILL "keyboard_double" — nuke entire Streamlit header bar ========== */
-    .stApp > header,
-    .stApp > div > div > header,
-    .stApp > div > div > div > header,
-    header[data-testid="stHeader"],
-    [data-testid="stToolbar"],
-    .stApp [data-testid="stHeader"] {
-        display: none !important;
-        height: 0 !important;
-        min-height: 0 !important;
-        max-height: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        overflow: hidden !important;
-        border: none !important;
-        visibility: hidden !important;
-    }
-
-    /* Sidebar pe bhi agar koi toggle button hai */
-    section[data-testid="stSidebar"] button[kind="header"],
-    section[data-testid="stSidebar"] > div > div > button,
-    button[kind="header"],
+    /* ========== FIX: ONLY hide "keyboard_double" button text — nothing else ========== */
+    /* Target the sidebar toggle button in the header toolbar */
     [data-testid="stSidebarCollapsedControl"] {
-        display: none !important;
-        height: 0 !important;
         width: 0 !important;
+        height: 0 !important;
         padding: 0 !important;
         margin: 0 !important;
         border: none !important;
         overflow: hidden !important;
         font-size: 0 !important;
         color: transparent !important;
-        visibility: hidden !important;
+        background: transparent !important;
+        position: absolute !important;
+        left: -9999px !important;
     }
-
-    /* Top spacing adjust — header hataya toh gap na rahe */
-    .stApp > div > div > div > div > div,
-    .stApp > div > div > div > div {
-        padding-top: 0 !important;
-        margin-top: 0 !important;
+    /* Fallback: any button with kind="header" that shows icon text */
+    button[kind="header"] {
+        width: 0 !important;
+        height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        overflow: hidden !important;
+        font-size: 0 !important;
+        color: transparent !important;
+        background: transparent !important;
+        position: absolute !important;
+        left: -9999px !important;
+    }
+    /* Shrink the toolbar row so it doesn't waste space, but keep it in DOM */
+    [data-testid="stToolbar"] {
+        height: 0 !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden !important;
     }
 
     /* ---- Sidebar ---- */
@@ -86,7 +82,6 @@ st.markdown("""<style>
         background: var(--white) !important;
         border-right: 1px solid var(--border);
         box-shadow: 2px 0 8px rgba(0,0,0,0.03);
-        margin-top: 0 !important;
         padding-top: 1.5rem !important;
     }
     section[data-testid="stSidebar"] * { color: var(--ink-2) !important; }
