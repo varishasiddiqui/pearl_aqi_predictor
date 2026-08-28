@@ -15,192 +15,166 @@ MODEL_NAME = "aqi_predictor_karachi"
 
 now_karachi = pd.Timestamp.now(tz="UTC").tz_convert(KARACHI_TZ)
 
-st.set_page_config(page_title="Pearl · AQI Station Karachi", layout="wide", initial_sidebar_state="expanded", page_icon="🫁")
+st.set_page_config(page_title="Pearl · AQI Station Karachi", layout="wide", page_icon="🫁")
 
 st.markdown("""<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
     :root{
         --bg:#F4F6F9; --white:#FFFFFF; --white-2:#F8F9FB; --white-3:#EEF1F5;
         --border:#E2E6ED; --border-2:#D1D5DE;
-        --ink:#111827; --ink-2:#374151; --ink-3:#6B7280; --ink-4:#9CA3AF;
-        --good:#10B981; --moderate:#F59E0B; --uhfs:#F97316;
-        --unhealthy:#EF4444; --very:#8B5CF6; --hazard:#DC2626;
-        --shadow:0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-        --shadow-md:0 4px 12px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.04);
-        --shadow-lg:0 10px 30px rgba(0,0,0,0.08), 0 4px 8px rgba(0,0,0,0.04);
-        --radius:16px;
+        --ink:#0F172A; --ink-2:#334155; --ink-3:#64748B; --ink-4:#94A3B8;
+        --good:#059669; --moderate:#D97706; --uhfs:#EA580C;
+        --unhealthy:#DC2626; --very:#7C3AED; --hazard:#B91C1C;
+        --shadow:0 1px 2px rgba(0,0,0,0.05);
+        --shadow-sm:0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+        --shadow-md:0 4px 6px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.03);
+        --radius:12px; --radius-lg:16px;
     }
 
     html, body, [class*="st-"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
     .stApp { background: var(--bg) !important; }
-    .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1180px; }
-    h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; color: var(--ink) !important; letter-spacing: -0.02em; }
+    .block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 1200px; }
+    h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; color: var(--ink) !important; letter-spacing: -0.025em; }
     p, span, label, div { color: var(--ink-2); }
-    .mono { font-family: 'JetBrains Mono', monospace !important; }
 
-    /* ========== FIX: ONLY hide "keyboard_double" button text — nothing else ========== */
-    /* Target the sidebar toggle button in the header toolbar */
-    [data-testid="stSidebarCollapsedControl"] {
-        width: 0 !important;
-        height: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        border: none !important;
-        overflow: hidden !important;
-        font-size: 0 !important;
-        color: transparent !important;
-        background: transparent !important;
-        position: absolute !important;
-        left: -9999px !important;
-    }
-    /* Fallback: any button with kind="header" that shows icon text */
-    button[kind="header"] {
-        width: 0 !important;
-        height: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        border: none !important;
-        overflow: hidden !important;
-        font-size: 0 !important;
-        color: transparent !important;
-        background: transparent !important;
-        position: absolute !important;
-        left: -9999px !important;
-    }
-    /* Shrink the toolbar row so it doesn't waste space, but keep it in DOM */
-    [data-testid="stToolbar"] {
-        height: 0 !important;
-        min-height: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        overflow: hidden !important;
+    /* ===== Kill sidebar completely ===== */
+    [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"],
+    section[data-testid="stSidebar"], button[kind="header"],
+    [data-testid="stToolbar"], [data-testid="stHeader"],
+    .stApp header, .stApp > header,
+    .stApp > div > div > header {
+        display: none !important;
+        width: 0 !important; height: 0 !important;
+        min-width: 0 !important; min-height: 0 !important;
+        padding: 0 !important; margin: 0 !important;
+        overflow: hidden !important; border: none !important;
     }
 
-    /* ---- Sidebar ---- */
-    section[data-testid="stSidebar"] {
-        background: var(--white) !important;
-        border-right: 1px solid var(--border);
-        box-shadow: 2px 0 8px rgba(0,0,0,0.03);
-        padding-top: 1.5rem !important;
+    /* ===== Top info bar ===== */
+    .top-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 10px 0 8px; flex-wrap: wrap; gap: 6px;
     }
-    section[data-testid="stSidebar"] * { color: var(--ink-2) !important; }
-    section[data-testid="stSidebar"] hr { border-color: var(--border) !important; }
+    .top-bar-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .top-bar-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .brand { font-weight: 800; font-size: 17px; color: var(--ink); letter-spacing: -0.03em; white-space: nowrap; }
+    .tag {
+        font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500;
+        color: var(--ink-3); background: var(--white); border: 1px solid var(--border);
+        padding: 3px 8px; border-radius: 6px; white-space: nowrap;
+    }
+    .tag-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+    .tag-dot-on { background: var(--good); }
+    .tag-dot-off { background: var(--ink-4); }
+    .clock {
+        font-family: 'JetBrains Mono', monospace; font-size: 11px;
+        color: var(--ink-3); text-align: right; white-space: nowrap;
+    }
 
-    .diag-label {
-        font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink-4);
-        letter-spacing:0.1em; text-transform:uppercase; margin:0 0 8px; font-weight:500;
+    /* ===== Hero row: AQI + weather side by side ===== */
+    .hero-row { display: flex; gap: 16px; margin: 8px 0 12px; align-items: stretch; }
+    .hero-card {
+        background: var(--white); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); padding: 24px 28px;
+        box-shadow: var(--shadow-sm); flex-shrink: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        min-width: 200px; position: relative; overflow: hidden;
     }
-    .diag-row {
-        display:flex; align-items:center; gap:8px;
-        font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--ink-2); padding:3px 0;
+    .hero-card::before {
+        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+        background: var(--accent);
     }
-    .dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-    .dot-on { background:var(--good); box-shadow:0 0 6px rgba(16,185,129,0.4); }
-    .dot-off { background:var(--ink-4); }
+    .hero-label { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; font-weight: 500; }
+    .hero-value { font-weight: 800; font-size: 52px; line-height: 1; color: var(--accent); }
+    .hero-cat { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; font-weight: 500; }
+    .hero-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-4); margin-top: 8px; }
 
-    /* ---- Panel / Card ---- */
-    .panel {
-        background: var(--white);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 24px 28px;
-        margin: 16px 0;
-        box-shadow: var(--shadow);
+    /* Weather grid in hero row */
+    .weather-grid {
+        flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
     }
-    .panel-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:16px; }
-    .panel-title { font-family:'Inter',sans-serif; font-weight:600; font-size:15px; color:var(--ink); margin:0; }
-    .panel-sub { font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink-4); text-transform:uppercase; letter-spacing:0.08em; font-weight:500; }
-
-    /* ---- Header Strip ---- */
-    .station-header {
-        display:flex; align-items:center; justify-content:space-between;
-        padding:12px 0 20px; border-bottom:1px solid var(--border); margin-bottom:20px;
-        flex-wrap:wrap; gap:10px;
+    @media (max-width: 700px) { .weather-grid { grid-template-columns: repeat(2, 1fr); } }
+    .w-card {
+        background: var(--white); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 16px 18px;
+        box-shadow: var(--shadow-sm); display: flex; flex-direction: column; justify-content: center;
     }
-    .station-id { font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--ink-4); letter-spacing:0.1em; font-weight:500; }
-    .station-name { font-family:'Inter',sans-serif; font-weight:700; font-size:22px; color:var(--ink); margin:0; }
-    .station-clock { font-family:'JetBrains Mono',monospace; font-size:12.5px; color:var(--ink-3); text-align:right; }
+    .w-label { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; font-weight: 500; }
+    .w-val { font-weight: 700; font-size: 22px; color: var(--ink); line-height: 1.1; }
 
-    /* ---- Breathing Halo Hero ---- */
-    .hero { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:36px 20px 28px; }
-    .halo-wrap { position:relative; width:210px; height:210px; display:flex; align-items:center; justify-content:center; margin-bottom:4px; }
-    .halo-ring {
-        position:absolute; inset:0; border-radius:50%;
-        border:2px solid var(--ring-color); opacity:0.3;
+    /* ===== Breathing halo (mini, inside hero card) ===== */
+    .halo-mini {
+        width: 120px; height: 120px; border-radius: 50%; position: relative;
+        display: flex; align-items: center; justify-content: center; margin-bottom: 8px;
+    }
+    .halo-mini-ring {
+        position: absolute; inset: 0; border-radius: 50%;
+        border: 2px solid var(--accent); opacity: 0.25;
         animation: breathe var(--breathe-speed) ease-in-out infinite;
     }
-    .halo-ring.r2 { inset:16px; animation-delay: calc(var(--breathe-speed) / -2); opacity:0.18; }
-    .halo-core {
-        position:relative; width:164px; height:164px; border-radius:50%;
-        background: var(--white);
-        border:1px solid var(--border);
-        box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,0.8);
-        display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2;
+    .halo-mini-ring.r2 { inset: 8px; animation-delay: calc(var(--breathe-speed) / -2); opacity: 0.15; }
+    .halo-mini-core {
+        width: 96px; height: 96px; border-radius: 50%;
+        background: var(--white); border: 1px solid var(--border);
+        display: flex; align-items: center; justify-content: center; z-index: 2;
+        box-shadow: var(--shadow-md);
     }
-    .halo-value { font-family:'Inter',sans-serif; font-weight:700; font-size:54px; line-height:1; color:var(--ring-color); }
-    .halo-cat { font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:var(--ink-3); margin-top:6px; font-weight:500; }
-    .hero-eyebrow { font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink-4); letter-spacing:0.12em; text-transform:uppercase; margin-bottom:2px; font-weight:500; }
-    .hero-dominant { font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--ink-3); margin-top:10px; }
-
     @keyframes breathe {
-        0%, 100% { transform: scale(1); opacity:0.3; }
-        50% { transform: scale(1.08); opacity:0.08; }
+        0%, 100% { transform: scale(1); opacity: 0.25; }
+        50% { transform: scale(1.1); opacity: 0.06; }
     }
-    @media (prefers-reduced-motion: reduce) {
-        .halo-ring { animation: none !important; }
+    @media (prefers-reduced-motion: reduce) { .halo-mini-ring { animation: none !important; } }
+
+    /* ===== Panel ===== */
+    .panel {
+        background: var(--white); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); padding: 20px 24px;
+        margin: 12px 0; box-shadow: var(--shadow-sm);
     }
+    .panel-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+    .panel-title { font-weight: 700; font-size: 14px; color: var(--ink); margin: 0; }
+    .panel-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
 
-    /* ---- Weather Chips ---- */
-    .chip-row { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-top:10px; }
-    .chip {
-        background: var(--white); border:1px solid var(--border); border-radius:14px;
-        padding:14px 20px; min-width:120px; text-align:center; box-shadow:var(--shadow);
-        transition: box-shadow 0.2s, transform 0.2s;
-    }
-    .chip:hover { box-shadow:var(--shadow-md); transform:translateY(-1px); }
-    .chip-label { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--ink-4); text-transform:uppercase; letter-spacing:0.06em; font-weight:500; }
-    .chip-value { font-family:'Inter',sans-serif; font-weight:600; font-size:20px; color:var(--ink); margin-top:3px; }
+    /* ===== Pollutant Gauges ===== */
+    .gauge-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+    @media (max-width: 900px) { .gauge-grid { grid-template-columns: repeat(3, 1fr); } }
+    .gauge-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .gauge-name { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-4); letter-spacing: 0.03em; font-weight: 500; }
+    .gauge-val { font-weight: 700; font-size: 12px; }
+    .gauge-status { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; font-weight: 500; }
 
-    /* ---- Pollutant Gauges ---- */
-    .gauge-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:14px; margin-top:8px; }
-    @media (max-width:900px){ .gauge-grid{ grid-template-columns:repeat(3,1fr);} }
-    .gauge-cell { display:flex; flex-direction:column; align-items:center; gap:8px; }
-    .gauge-name { font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink-4); letter-spacing:0.04em; font-weight:500; }
-    .gauge-val { font-family:'Inter',sans-serif; font-size:13px; font-weight:600; }
-    .gauge-status { font-family:'JetBrains Mono',monospace; font-size:9.5px; text-transform:uppercase; font-weight:500; }
-
-    /* ---- Forecast Day Tiles ---- */
+    /* ===== Forecast tiles ===== */
     .day-tile {
-        text-align:center; padding:20px 14px; border-radius:var(--radius);
-        background: var(--white); border:1px solid var(--border); box-shadow:var(--shadow);
-        transition: box-shadow 0.2s, transform 0.2s;
+        text-align: center; padding: 16px 12px; border-radius: var(--radius);
+        background: var(--white); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+        transition: box-shadow 0.2s, transform 0.15s;
     }
-    .day-tile:hover { box-shadow:var(--shadow-md); transform:translateY(-2px); }
-    .day-tile .d-label { font-family:'JetBrains Mono',monospace; color:var(--ink-4); font-size:10.5px; margin:0; letter-spacing:0.04em; font-weight:500; }
-    .day-tile .d-val { font-family:'Inter',sans-serif; font-weight:700; font-size:32px; margin:8px 0 4px; }
-    .day-tile .d-cat { font-family:'JetBrains Mono',monospace; font-size:11px; margin:0; text-transform:uppercase; letter-spacing:0.04em; font-weight:500; }
-    .day-tile .d-range { font-family:'JetBrains Mono',monospace; color:var(--ink-4); font-size:10.5px; margin-top:10px; }
+    .day-tile:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+    .day-tile .d-label { font-family: 'JetBrains Mono', monospace; color: var(--ink-4); font-size: 10px; margin: 0; letter-spacing: 0.03em; font-weight: 500; }
+    .day-tile .d-val { font-weight: 800; font-size: 28px; margin: 6px 0 2px; }
+    .day-tile .d-cat { font-family: 'JetBrains Mono', monospace; font-size: 10px; margin: 0; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 500; }
+    .day-tile .d-range { font-family: 'JetBrains Mono', monospace; color: var(--ink-4); font-size: 9.5px; margin-top: 8px; }
 
-    /* ---- Guidance Strip ---- */
+    /* ===== Guidance ===== */
     .guidance {
-        display:flex; gap:14px; align-items:flex-start; padding:18px 22px;
-        border-radius:14px; border:1px solid var(--gl-color);
-        background: color-mix(in srgb, var(--gl-color) 6%, var(--white));
-        box-shadow: var(--shadow);
+        display: flex; gap: 12px; align-items: flex-start; padding: 14px 18px;
+        border-radius: var(--radius); border: 1px solid var(--gl-color);
+        background: color-mix(in srgb, var(--gl-color) 5%, var(--white));
+        box-shadow: var(--shadow-sm);
     }
-    .guidance .g-dot { width:10px; height:10px; border-radius:50%; background:var(--gl-color); margin-top:5px; flex-shrink:0; box-shadow:0 0 8px color-mix(in srgb, var(--gl-color) 40%, transparent); }
-    .guidance .g-title { font-family:'Inter',sans-serif; font-weight:600; font-size:14px; color:var(--ink); margin:0 0 4px; }
-    .guidance .g-body { font-family:'Inter',sans-serif; font-size:13px; color:var(--ink-3); margin:0; line-height:1.5; }
+    .guidance .g-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gl-color); margin-top: 5px; flex-shrink: 0; }
+    .guidance .g-title { font-weight: 600; font-size: 13px; color: var(--ink); margin: 0 0 2px; }
+    .guidance .g-body { font-size: 12px; color: var(--ink-3); margin: 0; line-height: 1.45; }
 
-    .stAlert { border-radius: 14px !important; background: var(--white) !important; border:1px solid var(--border) !important; box-shadow:var(--shadow) !important; }
+    .stAlert { border-radius: var(--radius) !important; background: var(--white) !important; border: 1px solid var(--border) !important; }
     div[data-testid="stMetricValue"] { color: var(--ink) !important; }
     hr { border-color: var(--border) !important; }
 
     .footer-note {
-        text-align:center; color:var(--ink-4);
-        font-family:'JetBrains Mono',monospace; font-size:10px;
-        letter-spacing:0.06em; margin-top:10px; font-weight:500;
+        text-align: center; color: var(--ink-4);
+        font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+        letter-spacing: 0.05em; margin-top: 8px; font-weight: 500;
     }
 </style>""", unsafe_allow_html=True)
 
@@ -228,61 +202,30 @@ def load_model():
                     model = joblib.load(os.path.join(model_dir, "best_model.pkl"))
                     scaler = joblib.load(os.path.join(model_dir, "scaler.pkl"))
                     features = joblib.load(os.path.join(model_dir, "feature_cols.pkl"))
-                    st.session_state["model_source"] = f"Hopsworks Model Registry (v{registry_model.version})"
+                    st.session_state["model_source"] = f"Hopsworks v{registry_model.version}"
                     return model, scaler, features
                 except Exception as version_err:
                     last_error = version_err
                     continue
             raise last_error
         except Exception as e:
-            st.sidebar.warning(f"Couldn't load from Hopsworks Model Registry, using local files instead. ({e})")
+            st.session_state["model_source"] = "local fallback"
+            st.warning(f"Using local model. ({e})")
 
     model = joblib.load("best_model.pkl")
     scaler = joblib.load("scaler.pkl")
     features = joblib.load("feature_cols.pkl")
-    st.session_state["model_source"] = "local file (fallback)"
+    st.session_state["model_source"] = "local fallback"
     return model, scaler, features
 
 
 model, scaler, feature_cols = load_model()
 
-city_label = "Karachi"
-
-with st.sidebar:
-    st.markdown("<p class='diag-label' style='margin-top:8px'>Model</p>", unsafe_allow_html=True)
-    st.markdown(f"""
-        <div class='diag-row'>· source&nbsp;&nbsp;<span style='color:var(--ink-3)'>{st.session_state.get('model_source', 'unknown')}</span></div>
-        <div class='diag-row'>· inputs&nbsp;&nbsp;<span style='color:var(--ink-3)'>{len(feature_cols)} features</span></div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("<p class='diag-label' style='margin-top:24px'>Data Sources</p>", unsafe_allow_html=True)
-    _has_ow = bool(st.secrets.get("OPENWEATHER_API_KEY", ""))
-    _has_hw = bool(st.secrets.get("HOPSWORKS_API_KEY", ""))
-    sources = [
-        ("OpenWeather API", "current + forecast pollutants", _has_ow),
-        ("Open-Meteo API", "weather forecast", True),
-        ("Hopsworks Feature Store", "today's measured trend", _has_hw),
-        ("Hopsworks Model Registry", "trained model", _has_hw),
-    ]
-    for name, desc, ok in sources:
-        dotclass = "dot-on" if ok else "dot-off"
-        state = "configured" if ok else "no key"
-        st.markdown(f"""
-        <div class='diag-row' style='align-items:flex-start;margin-bottom:10px'>
-            <span class='dot {dotclass}' style='margin-top:5px'></span>
-            <span>{name}<br><span style='color:var(--ink-4);font-size:10.5px'>{desc} · {state}</span></span>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown(f"""
-        <div class='diag-row'>tz&nbsp;&nbsp;<span style='color:var(--ink-3)'>UTC+5 (PKT)</span></div>
-        <div class='diag-row'>refreshed&nbsp;&nbsp;<span style='color:var(--ink-3)'>{now_karachi.strftime('%H:%M:%S')}</span></div>
-    """, unsafe_allow_html=True)
-
+_has_ow = bool(st.secrets.get("OPENWEATHER_API_KEY", ""))
+_has_hw = bool(st.secrets.get("HOPSWORKS_API_KEY", ""))
 
 # ---------------------------------------------------------------------------
-# Feature Store recent actuals
+# Feature Store
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=1800)
 def fetch_recent_actuals_from_feature_store(lookback_hours=72):
@@ -301,13 +244,12 @@ def fetch_recent_actuals_from_feature_store(lookback_hours=72):
         window_start = now_karachi - pd.Timedelta(hours=lookback_hours)
         df = df[(df["datetime"] >= window_start) & (df["datetime"] <= now_karachi)]
         return df.sort_values("datetime").reset_index(drop=True)
-    except Exception as e:
-        st.sidebar.warning(f"Feature Store read failed, today's trend may be incomplete. ({e})")
+    except Exception:
         return pd.DataFrame()
 
 
 # ---------------------------------------------------------------------------
-# Live data fetching
+# Live data
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=1800)
 def fetch_current_data():
@@ -388,138 +330,132 @@ def get_aqi(components):
 
 
 def aqi_info(val):
-    if val <= 50: return "Good", "4.2s", "#10B981", "Clear conditions"
-    elif val <= 100: return "Moderate", "3.6s", "#F59E0B", "Acceptable"
-    elif val <= 150: return "Unhealthy for Sensitive", "3.0s", "#F97316", "Sensitive groups affected"
-    elif val <= 200: return "Unhealthy", "2.4s", "#EF4444", "Everyone affected"
-    elif val <= 300: return "Very Unhealthy", "1.8s", "#8B5CF6", "Health alert"
-    else: return "Hazardous", "1.3s", "#DC2626", "Emergency conditions"
+    if val <= 50: return "Good", "4.2s", "#059669", "Clear air"
+    elif val <= 100: return "Moderate", "3.6s", "#D97706", "Acceptable"
+    elif val <= 150: return "Sensitive Groups", "3.0s", "#EA580C", "Limit outdoors"
+    elif val <= 200: return "Unhealthy", "2.4s", "#DC2626", "Reduce activity"
+    elif val <= 300: return "Very Unhealthy", "1.8s", "#7C3AED", "Health alert"
+    else: return "Hazardous", "1.3s", "#B91C1C", "Stay indoors"
 
 
 def build_forecast(feature_df, hist_lookback_df, current_aqi, current_row, feature_cols, model, scaler, hours=72):
     df = feature_df.reset_index(drop=True)
     n = min(hours, len(df))
-
     aqi_history = list(hist_lookback_df["aqi"]) if hist_lookback_df is not None and not hist_lookback_df.empty else []
     pm25_history = list(hist_lookback_df["pm2_5"]) if hist_lookback_df is not None and not hist_lookback_df.empty else []
     aqi_history.append(current_aqi)
     pm25_history.append(current_row.get("pm2_5", np.nan))
 
     def lag(hist, k):
-        if len(hist) >= k:
-            return hist[-k]
-        return hist[0] if hist else np.nan
-
+        return hist[-k] if len(hist) >= k else (hist[0] if hist else np.nan)
     def rolling(hist, k):
-        window = hist[-k:] if len(hist) >= k else hist
-        return float(np.mean(window)) if window else np.nan
+        w = hist[-k:] if len(hist) >= k else hist
+        return float(np.mean(w)) if w else np.nan
 
     preds, times = [], []
     for h in range(n):
         row = df.iloc[h]
         dt = row["datetime"]
         feat = {
-            "pm2_5": row.get("pm2_5", np.nan),
-            "pm10": row.get("pm10", np.nan),
-            "so2": row.get("so2", np.nan),
-            "co": row.get("co", np.nan),
-            "no2": row.get("no2", np.nan),
-            "o3": row.get("o3", np.nan),
-            "pressure": row.get("pressure", np.nan),
-            "wind_speed": row.get("wind_speed", np.nan),
-            "humidity": row.get("humidity", np.nan),
-            "temperature": row.get("temperature", np.nan),
-            "month": dt.month,
-            "hour": dt.hour,
-            "day_of_week": dt.dayofweek,
+            "pm2_5": row.get("pm2_5", np.nan), "pm10": row.get("pm10", np.nan),
+            "so2": row.get("so2", np.nan), "co": row.get("co", np.nan),
+            "no2": row.get("no2", np.nan), "o3": row.get("o3", np.nan),
+            "pressure": row.get("pressure", np.nan), "wind_speed": row.get("wind_speed", np.nan),
+            "humidity": row.get("humidity", np.nan), "temperature": row.get("temperature", np.nan),
+            "month": dt.month, "hour": dt.hour, "day_of_week": dt.dayofweek,
             "is_weekend": int(dt.dayofweek in (5, 6)),
-            "aqi_lag_1": lag(aqi_history, 1),
-            "aqi_lag_3": lag(aqi_history, 3),
-            "aqi_lag_24": lag(aqi_history, 24),
-            "pm25_lag_1": lag(pm25_history, 1),
-            "pm25_lag_24": lag(pm25_history, 24),
-            "aqi_rolling_3": rolling(aqi_history, 3),
-            "aqi_rolling_6": rolling(aqi_history, 6),
-            "aqi_rolling_24": rolling(aqi_history, 24),
+            "aqi_lag_1": lag(aqi_history, 1), "aqi_lag_3": lag(aqi_history, 3),
+            "aqi_lag_24": lag(aqi_history, 24), "pm25_lag_1": lag(pm25_history, 1),
+            "pm25_lag_24": lag(pm25_history, 24), "aqi_rolling_3": rolling(aqi_history, 3),
+            "aqi_rolling_6": rolling(aqi_history, 6), "aqi_rolling_24": rolling(aqi_history, 24),
             "pm25_rolling_24": rolling(pm25_history, 24),
         }
-
         X = pd.DataFrame([feat])[feature_cols]
         X_scaled = scaler.transform(X)
         pred = max(0, float(model.predict(X_scaled).flatten()[0]))
-
         preds.append(pred)
         times.append(dt)
         aqi_history.append(pred)
         pm25_history.append(row.get("pm2_5", np.nan))
-
     return times, preds
 
 
 try:
     pollution, weather, combined_df = fetch_current_data()
     hist_lookback_df = fetch_recent_actuals_from_feature_store(lookback_hours=72)
-    hist_df = (
-        hist_lookback_df[hist_lookback_df["datetime"] >= now_karachi.normalize()]
-        if not hist_lookback_df.empty else hist_lookback_df
-    )
+    hist_df = hist_lookback_df[hist_lookback_df["datetime"] >= now_karachi.normalize()] if not hist_lookback_df.empty else hist_lookback_df
     current_aqi, dominant = get_aqi(pollution)
     cat, breathe_speed, color, cat_desc = aqi_info(current_aqi)
 
-    # ---- Header ----
+    # ===== TOP BAR: brand + all info in one line =====
     st.markdown(f"""
-    <div class='station-header'>
-        <div>
-            <p class='station-name'>🫁 Pearl · AQI Station</p>
-            <p class='station-id'>{city_label.upper()} · 24.8607°N, 67.0011°E</p>
+    <div class='top-bar'>
+        <div class='top-bar-left'>
+            <span class='brand'>🫁 Pearl AQI</span>
+            <span class='tag'>Karachi 24.86°N</span>
+            <span class='tag'><span class='tag-dot {"tag-dot-on" if _has_ow else "tag-dot-off"}'></span>OpenWeather</span>
+            <span class='tag'><span class='tag-dot {"tag-dot-on" if _has_hw else "tag-dot-off"}'></span>Hopsworks</span>
+            <span class='tag'>Model: {st.session_state.get("model_source", "—")}</span>
+            <span class='tag'>{len(feature_cols)} features</span>
         </div>
-        <div class='station-clock'>{now_karachi.strftime('%A, %d %B %Y')}<br>{now_karachi.strftime('%I:%M:%S %p')} PKT</div>
+        <div class='top-bar-right'>
+            <span class='clock'>{now_karachi.strftime('%a %d %b')}<br>{now_karachi.strftime('%I:%M %p')} PKT</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ---- Hero Halo ----
+    # ===== HERO ROW: AQI card + 4 weather cards side by side =====
     st.markdown(f"""
-    <div class='hero' style='--ring-color:{color}; --breathe-speed:{breathe_speed}'>
-        <p class='hero-eyebrow'>Current Air Quality Index</p>
-        <div class='halo-wrap'>
-            <div class='halo-ring'></div>
-            <div class='halo-ring r2'></div>
-            <div class='halo-core'>
-                <span class='halo-value'>{current_aqi:.0f}</span>
-                <span class='halo-cat'>{cat}</span>
+    <div class='hero-row'>
+        <div class='hero-card' style='--accent:{color}; --breathe-speed:{breathe_speed}'>
+            <div class='halo-mini'>
+                <div class='halo-mini-ring'></div>
+                <div class='halo-mini-ring r2'></div>
+                <div class='halo-mini-core'>
+                    <span style='font-weight:800;font-size:36px;color:{color};line-height:1'>{current_aqi:.0f}</span>
+                </div>
+            </div>
+            <div class='hero-label'>Air Quality Index</div>
+            <div class='hero-cat' style='color:{color}'>{cat}</div>
+            <div class='hero-sub'>{cat_desc} · {dominant.upper()}</div>
+        </div>
+        <div class='weather-grid'>
+            <div class='w-card'>
+                <div class='w-label'>Temperature</div>
+                <div class='w-val'>{weather['temperature_2m']:.1f}°</div>
+            </div>
+            <div class='w-card'>
+                <div class='w-label'>Humidity</div>
+                <div class='w-val'>{weather['relative_humidity_2m']:.0f}%</div>
+            </div>
+            <div class='w-card'>
+                <div class='w-label'>Wind</div>
+                <div class='w-val'>{weather['wind_speed_10m']:.1f}<span style='font-size:12px;font-weight:500;color:var(--ink-3)'> km/h</span></div>
+            </div>
+            <div class='w-card'>
+                <div class='w-label'>Pressure</div>
+                <div class='w-val'>{weather['surface_pressure']:.0f}<span style='font-size:11px;font-weight:500;color:var(--ink-3)'> hPa</span></div>
             </div>
         </div>
-        <p class='hero-dominant'>{cat_desc} · dominant pollutant: {dominant.upper()}</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # ---- Weather Chips ----
-    st.markdown(f"""
-    <div class='chip-row'>
-        <div class='chip'><div class='chip-label'>Temperature</div><div class='chip-value'>{weather['temperature_2m']:.1f}°C</div></div>
-        <div class='chip'><div class='chip-label'>Humidity</div><div class='chip-value'>{weather['relative_humidity_2m']:.0f}%</div></div>
-        <div class='chip'><div class='chip-label'>Wind Speed</div><div class='chip-value'>{weather['wind_speed_10m']:.1f} km/h</div></div>
-        <div class='chip'><div class='chip-label'>Pressure</div><div class='chip-value'>{weather['surface_pressure']:.0f} hPa</div></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ---- Pollutant Gauges ----
+    # ===== POLLUTANT GAUGES =====
     st.markdown("""<div class='panel'><div class='panel-head'>
         <p class='panel-title'>Pollutant Levels</p>
-        <p class='panel-sub'>% of health threshold</p>
+        <p class='panel-sub'>% of threshold</p>
     </div>""", unsafe_allow_html=True)
-
     show_p = {k: v for k, v in pollution.items() if k not in ["no", "nh3"]}
     threshold = {"pm2_5": 75, "pm10": 150, "no2": 100, "so2": 75, "o3": 70, "co": 10000}
     gauges = "<div class='gauge-grid'>"
     for p, val in show_p.items():
         pct = min(val / threshold.get(p, 100) * 100, 100)
         status = "Low" if pct < 40 else "Moderate" if pct < 70 else "High"
-        gcolor = "#10B981" if pct < 40 else "#F59E0B" if pct < 70 else "#EF4444"
+        gcolor = "#059669" if pct < 40 else "#D97706" if pct < 70 else "#DC2626"
         gauges += f"""
         <div class='gauge-cell'>
-            <div style='width:60px;height:60px;border-radius:50%;background:conic-gradient({gcolor} {pct:.0f}%, var(--white-3) {pct:.0f}% 100%);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);'>
-                <div style='width:46px;height:46px;border-radius:50%;background:var(--white);display:flex;align-items:center;justify-content:center;'>
+            <div style='width:52px;height:52px;border-radius:50%;background:conic-gradient({gcolor} {pct:.0f}%, var(--white-3) {pct:.0f}% 100%);display:flex;align-items:center;justify-content:center;'>
+                <div style='width:40px;height:40px;border-radius:50%;background:var(--white);display:flex;align-items:center;justify-content:center;'>
                     <span class='gauge-val' style='color:{gcolor}'>{val:.0f}</span>
                 </div>
             </div>
@@ -530,61 +466,49 @@ try:
     st.markdown(gauges, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ---- Today's Trend ----
+    # ===== TODAY'S TREND =====
     st.markdown("""<div class='panel'><div class='panel-head'>
         <p class='panel-title'>Today's AQI Trend</p>
         <p class='panel-sub'>Measured · Predicted</p>
     </div>""", unsafe_allow_html=True)
     try:
         if not hist_df.empty:
-            hist_df = hist_df.copy()
-            hist_df = hist_df.sort_values("datetime")
-
+            hist_df = hist_df.copy().sort_values("datetime")
         today_end = now_karachi.replace(hour=23, minute=59, second=59, microsecond=0)
         future_times, future_preds = [], []
         if not combined_df.empty:
-            future_today_mask = (combined_df["datetime"] > now_karachi) & (combined_df["datetime"] <= today_end)
-            future_today_df = combined_df[future_today_mask].sort_values("datetime")
-            if not future_today_df.empty:
-                future_times, future_preds = build_forecast(
-                    future_today_df, hist_lookback_df, current_aqi, pollution,
-                    feature_cols, model, scaler, hours=len(future_today_df)
-                )
-
+            ft_df = combined_df[(combined_df["datetime"] > now_karachi) & (combined_df["datetime"] <= today_end)].sort_values("datetime")
+            if not ft_df.empty:
+                future_times, future_preds = build_forecast(ft_df, hist_lookback_df, current_aqi, pollution, feature_cols, model, scaler, hours=len(ft_df))
         if hist_df.empty and not future_times:
-            st.warning("No trend data available right now — Feature Store may not have today's data yet, or the API may be rate-limited.")
+            st.warning("No trend data available yet.")
         else:
-            fig, ax = plt.subplots(figsize=(12, 4.6))
+            fig, ax = plt.subplots(figsize=(12, 3.8))
             fig.patch.set_facecolor("#FFFFFF")
             ax.set_facecolor("#FAFBFC")
-            day_start_plot = now_karachi.replace(hour=0, minute=0, second=0, microsecond=0)
-            day_end_plot = now_karachi.replace(hour=23, minute=59, second=0, microsecond=0)
-            ax.fill_between([day_start_plot, day_end_plot], 0, 50, alpha=0.08, color="#10B981")
-            ax.fill_between([day_start_plot, day_end_plot], 50, 100, alpha=0.08, color="#F59E0B")
-            ax.fill_between([day_start_plot, day_end_plot], 100, 150, alpha=0.08, color="#F97316")
-            ax.fill_between([day_start_plot, day_end_plot], 150, 200, alpha=0.08, color="#EF4444")
-
+            ds = now_karachi.replace(hour=0, minute=0, second=0, microsecond=0)
+            de = now_karachi.replace(hour=23, minute=59, second=0, microsecond=0)
+            ax.fill_between([ds, de], 0, 50, alpha=0.06, color="#059669")
+            ax.fill_between([ds, de], 50, 100, alpha=0.06, color="#D97706")
+            ax.fill_between([ds, de], 100, 150, alpha=0.06, color="#EA580C")
+            ax.fill_between([ds, de], 150, 200, alpha=0.06, color="#DC2626")
             all_vals = []
             if not hist_df.empty:
-                ax.plot(hist_df["datetime"], hist_df["aqi"], color=color, linewidth=2.5, label="Actual (measured)", zorder=5)
+                ax.plot(hist_df["datetime"], hist_df["aqi"], color=color, linewidth=2, label="Measured", zorder=5)
                 all_vals += hist_df["aqi"].tolist()
             if future_times:
-                ax.plot(future_times, future_preds, color=color, linewidth=2, linestyle="--", alpha=0.7, label="Predicted", zorder=5)
+                ax.plot(future_times, future_preds, color=color, linewidth=1.8, linestyle="--", alpha=0.65, label="Predicted", zorder=5)
                 all_vals += future_preds
-
-            ax.scatter([now_karachi], [current_aqi], color=color, s=110, zorder=6, edgecolors="#FFFFFF", linewidths=2.5, label="Now")
-            ax.axhline(current_aqi, color="#9CA3AF", linestyle="--", alpha=0.35, linewidth=1)
-            ax.set_ylabel("AQI", color="#6B7280", fontsize=11, fontfamily="sans-serif", fontweight=500)
+            ax.scatter([now_karachi], [current_aqi], color=color, s=80, zorder=6, edgecolors="#FFF", linewidths=2, label="Now")
+            ax.axhline(current_aqi, color="#CBD5E1", linestyle="--", alpha=0.4, linewidth=0.8)
+            ax.set_ylabel("AQI", color="#64748B", fontsize=10, fontweight=500)
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%I %p", tz=KARACHI_TZ))
-            ax.grid(True, alpha=0.15, color="#D1D5DE", linestyle="-")
-            ax.tick_params(colors="#6B7280", labelsize=9)
-            for label in ax.get_xticklabels() + ax.get_yticklabels():
-                label.set_fontfamily("sans-serif")
-            for spine in ax.spines.values():
-                spine.set_color("#E2E6ED")
-            ax.legend(facecolor="#FFFFFF", edgecolor="#E2E6ED", labelcolor="#374151", fontsize=9, loc="upper right", framealpha=0.95)
-            if all_vals:
-                ax.set_ylim(max(0, min(all_vals) - 10), max(all_vals) + 10)
+            ax.grid(True, alpha=0.12, color="#E2E8F0", linestyle="-")
+            ax.tick_params(colors="#64748B", labelsize=8)
+            for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
+            for s in ax.spines.values(): s.set_color("#E2E8F0")
+            ax.legend(facecolor="#FFF", edgecolor="#E2E8F0", labelcolor="#334155", fontsize=8, loc="upper right", framealpha=0.95)
+            if all_vals: ax.set_ylim(max(0, min(all_vals) - 10), max(all_vals) + 10)
             plt.tight_layout()
             st.pyplot(fig)
             plt.close(fig)
@@ -592,100 +516,77 @@ try:
         st.warning(f"Trend: {e}")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ---- 3-Day Forecast ----
+    # ===== 3-DAY FORECAST =====
     st.markdown("""<div class='panel'><div class='panel-head'>
         <p class='panel-title'>3-Day Forecast</p>
-        <p class='panel-sub'>Recursive hourly model</p>
+        <p class='panel-sub'>Hourly model prediction</p>
     </div>""", unsafe_allow_html=True)
     try:
         if combined_df.empty:
-            st.warning("Forecast data unavailable right now — API may be rate-limited or unavailable.")
+            st.warning("Forecast unavailable.")
         else:
             future_df = combined_df[combined_df["datetime"] > now_karachi].sort_values("datetime")
-            times, forecast_aqi = build_forecast(
-                future_df, hist_lookback_df, current_aqi, pollution,
-                feature_cols, model, scaler, hours=72
-            )
-
+            times, forecast_aqi = build_forecast(future_df, hist_lookback_df, current_aqi, pollution, feature_cols, model, scaler, hours=72)
             if not times:
-                st.warning("Not enough forecast data returned by the API to build a 3-day view.")
+                st.warning("Not enough forecast data.")
             else:
                 fdf = pd.DataFrame({"datetime": times, "aqi": forecast_aqi})
                 fdf["date"] = fdf["datetime"].apply(lambda d: d.date())
                 unique_dates = sorted(fdf["date"].unique())[:3]
-
                 day_cols = st.columns(len(unique_dates))
                 for d, day in enumerate(unique_dates):
-                    day_vals = fdf.loc[fdf["date"] == day, "aqi"]
-                    day_avg = day_vals.mean()
-                    day_min, day_max = day_vals.min(), day_vals.max()
-                    day_cat, _, day_color, _ = aqi_info(day_avg)
-                    day_date_label = pd.Timestamp(day).strftime("%d %b · %A")
+                    dv = fdf.loc[fdf["date"] == day, "aqi"]
+                    da, dmi, dmx = dv.mean(), dv.min(), dv.max()
+                    dc, _, dcol, _ = aqi_info(da)
+                    dl = pd.Timestamp(day).strftime("%d %b · %a")
                     with day_cols[d]:
                         st.markdown(f"""
-                        <div class='day-tile' style='border-color:{day_color}30'>
-                            <p class='d-label'>{day_date_label}</p>
-                            <p class='d-val' style='color:{day_color}'>{day_avg:.0f}</p>
-                            <p class='d-cat' style='color:{day_color}'>{day_cat}</p>
-                            <p class='d-range'>↓ {day_min:.0f} &nbsp;—&nbsp; {day_max:.0f} ↑</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                fig, ax = plt.subplots(figsize=(14, 2.8))
+                        <div class='day-tile' style='border-color:{dcol}25'>
+                            <p class='d-label'>{dl}</p>
+                            <p class='d-val' style='color:{dcol}'>{da:.0f}</p>
+                            <p class='d-cat' style='color:{dcol}'>{dc}</p>
+                            <p class='d-range'>↓ {dmi:.0f} — {dmx:.0f} ↑</p>
+                        </div>""", unsafe_allow_html=True)
+                fig, ax = plt.subplots(figsize=(12, 2.4))
                 fig.patch.set_facecolor("#FFFFFF")
                 ax.set_facecolor("#FAFBFC")
-                ax.plot(fdf["datetime"], fdf["aqi"], color=color, linewidth=1.8)
-                ax.fill_between(fdf["datetime"], fdf["aqi"] - 3, fdf["aqi"] + 3, alpha=0.1, color=color)
-                ax.axhline(100, color="#F59E0B", linestyle="--", alpha=0.5, linewidth=0.8)
-                ax.axhline(150, color="#F97316", linestyle="--", alpha=0.5, linewidth=0.8)
-                ax.set_ylabel("AQI", color="#6B7280", fontsize=10, fontfamily="sans-serif", fontweight=500)
+                ax.plot(fdf["datetime"], fdf["aqi"], color=color, linewidth=1.5)
+                ax.fill_between(fdf["datetime"], fdf["aqi"] - 3, fdf["aqi"] + 3, alpha=0.08, color=color)
+                ax.axhline(100, color="#D97706", linestyle="--", alpha=0.4, linewidth=0.7)
+                ax.axhline(150, color="#EA580C", linestyle="--", alpha=0.4, linewidth=0.7)
+                ax.set_ylabel("AQI", color="#64748B", fontsize=9, fontweight=500)
                 ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d", tz=KARACHI_TZ))
-                ax.grid(True, alpha=0.15, color="#D1D5DE", linestyle="-")
-                ax.tick_params(colors="#6B7280", labelsize=8)
-                for label in ax.get_xticklabels() + ax.get_yticklabels():
-                    label.set_fontfamily("sans-serif")
-                for spine in ax.spines.values():
-                    spine.set_color("#E2E6ED")
+                ax.grid(True, alpha=0.12, color="#E2E8F0", linestyle="-")
+                ax.tick_params(colors="#64748B", labelsize=7)
+                for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
+                for s in ax.spines.values(): s.set_color("#E2E8F0")
                 plt.tight_layout()
                 st.pyplot(fig)
                 plt.close(fig)
-
                 if any(a > 150 for a in forecast_aqi):
-                    guide_color, guide_title, guide_body = "#EF4444", "Hazardous AQI expected", "Avoid outdoor activity over the next 3 days where possible."
+                    gc, gt, gb = "#DC2626", "Hazardous AQI expected", "Avoid outdoor activity."
                 elif any(a > 100 for a in forecast_aqi):
-                    guide_color, guide_title, guide_body = "#F59E0B", "Elevated AQI expected", "Sensitive groups should limit prolonged time outdoors."
+                    gc, gt, gb = "#D97706", "Elevated AQI expected", "Sensitive groups should limit outdoor time."
                 else:
-                    guide_color, guide_title, guide_body = "#10B981", "Within safe range", "No elevated AQI expected in the next 3 days."
-                st.markdown(f"""
-                <div class='guidance' style='--gl-color:{guide_color}'>
-                    <span class='g-dot'></span>
-                    <div><p class='g-title'>{guide_title}</p><p class='g-body'>{guide_body}</p></div>
-                </div>""", unsafe_allow_html=True)
+                    gc, gt, gb = "#059669", "Within safe range", "No elevated AQI expected."
+                st.markdown(f"""<div class='guidance' style='--gl-color:{gc}'><span class='g-dot'></span><div><p class='g-title'>{gt}</p><p class='g-body'>{gb}</p></div></div>""", unsafe_allow_html=True)
     except Exception as e:
-        st.error(f"Forecast error: {e}")
+        st.error(f"Forecast: {e}")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ---- Current Guidance ----
+    # ===== GUIDANCE =====
     tips = {
-        "Good": ("Excellent air quality — perfect for outdoor activity.", "#10B981"),
-        "Moderate": ("Acceptable. Sensitive people should limit prolonged outdoor exertion.", "#F59E0B"),
-        "Unhealthy for Sensitive": ("Sensitive groups should reduce outdoor activity.", "#F97316"),
-        "Unhealthy": ("Reduce outdoor physical activity for everyone.", "#EF4444"),
-        "Very Unhealthy": ("Avoid outdoors — use air purifiers indoors.", "#8B5CF6"),
-        "Hazardous": ("Emergency conditions. Stay indoors and seek medical help if needed.", "#DC2626"),
+        "Good": ("Excellent air quality — perfect for outdoor activity.", "#059669"),
+        "Moderate": ("Acceptable. Sensitive people should limit prolonged exertion.", "#D97706"),
+        "Sensitive Groups": ("Sensitive groups should reduce outdoor activity.", "#EA580C"),
+        "Unhealthy": ("Reduce outdoor physical activity for everyone.", "#DC2626"),
+        "Very Unhealthy": ("Avoid outdoors — use air purifiers indoors.", "#7C3AED"),
+        "Hazardous": ("Emergency. Stay indoors, seek medical help if needed.", "#B91C1C"),
     }
-    tip_body, tip_color = tips.get(cat, ("", color))
-    st.markdown(f"""
-    <div class='guidance' style='--gl-color:{tip_color}'>
-        <span class='g-dot'></span>
-        <div><p class='g-title'>Right now: {cat}</p><p class='g-body'>{tip_body}</p></div>
-    </div>""", unsafe_allow_html=True)
+    tb, tc = tips.get(cat, ("", color))
+    st.markdown(f"""<div class='guidance' style='--gl-color:{tc}'><span class='g-dot'></span><div><p class='g-title'>Right now: {cat}</p><p class='g-body'>{tb}</p></div></div>""", unsafe_allow_html=True)
 
 except Exception as e:
     st.error(f"Error: {e}")
 
-st.markdown(
-    "<p class='footer-note'>PEARL AQI STATION · KARACHI &nbsp;·&nbsp; "
-    "Hopsworks Feature Store + Model Registry &nbsp;·&nbsp; OpenWeather + Open-Meteo</p>",
-    unsafe_allow_html=True,
-)
+st.markdown("<p class='footer-note'>PEARL AQI STATION · KARACHI · Hopsworks + OpenWeather + Open-Meteo</p>", unsafe_allow_html=True)
