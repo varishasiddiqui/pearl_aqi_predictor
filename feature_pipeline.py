@@ -93,15 +93,6 @@ def build_features(days):
     pollution_df = pd.DataFrame(pollution_rows).drop_duplicates(subset="datetime").sort_values("datetime")
     pollution_df = pollution_df.reset_index(drop=True)
 
-    # Force pollutant columns to float64. Without this, pandas infers dtype
-    # per-batch — if every reading for a pollutant (e.g. nh3) happens to be a
-    # whole number in a given run, pandas stores it as int64, which Hopworks
-    # sees as 'bigint' and rejects against the feature group's 'double' schema
-    # (locked in from an earlier run that had decimal values). This caused
-    # intermittent FeatureStoreException schema-mismatch failures.
-    pollutant_cols = [c for c in ["co", "no", "no2", "o3", "so2", "pm2_5", "pm10", "nh3"] if c in pollution_df.columns]
-    pollution_df[pollutant_cols] = pollution_df[pollutant_cols].astype(float)
-
     weather_raw = fetch_weather_history(LAT, LON, days)
     weather_df = pd.DataFrame({
         "datetime": pd.to_datetime(weather_raw["time"]).tz_localize("UTC").tz_convert(KARACHI_TZ),
@@ -168,20 +159,39 @@ def build_features(days):
     merged_df = merged_df.dropna(subset=feature_input_cols).reset_index(drop=True)
     print(f"Rows before dropna: {before} -> after: {len(merged_df)}")
 
-    # Same schema-drift risk as the pollutant columns above: Open-Meteo often
-    # returns humidity (and occasionally temperature/wind_speed/pressure) as
-    # whole numbers, which pandas would infer as int64 -> Hopsworks 'bigint'
-    # -> mismatch against the 'double' schema. Force these to float too.
-    double_cols = [
-        "temperature", "humidity", "wind_speed", "pressure", "aqi",
-        "aqi_lag_1", "aqi_lag_3", "aqi_lag_24", "pm25_lag_1", "pm25_lag_24",
-        "aqi_rolling_3", "aqi_rolling_6", "aqi_rolling_24", "pm25_rolling_24",
-        "target_aqi_24hr",
-    ]
-    double_cols = [c for c in double_cols if c in merged_df.columns]
-    merged_df[double_cols] = merged_df[double_cols].astype(float)
-
     return merged_df
+
+
+def align_dtypes_to_schema(df, feature_group):
+    """Cast df columns to whatever type the EXISTING feature group schema
+    actually expects, instead of guessing. This is what caused the back-and-forth
+    bugs: OpenWeather/Open-Meteo readings can come back as either whole numbers
+    or decimals depending on the hour, so pandas' inferred dtype (int64 vs
+    float64) varies run to run and randomly mismatches whatever type the
+    feature group locked in on its very first insert. Reading the schema at
+    runtime and casting to match it means this class of bug can't recur,
+    regardless of which column or which direction (int<->float) it hits."""
+    type_map = {
+        "bigint": "int64", "int": "int32", "smallint": "int16", "tinyint": "int8",
+        "double": "float64", "float": "float32",
+        "boolean": "bool",
+        "string": "string",
+    }
+    schema = {f.name: f.type for f in feature_group.features}
+    for col in df.columns:
+        expected = schema.get(col)
+        target_dtype = type_map.get(expected)
+        if target_dtype is None:
+            continue  # timestamp/date/unrecognized types: leave as-is
+        try:
+            if target_dtype.startswith("int") and df[col].isna().any():
+                # nullable Int64 so NaNs don't crash the cast
+                df[col] = df[col].astype("Int64")
+            else:
+                df[col] = df[col].astype(target_dtype)
+        except (ValueError, TypeError) as e:
+            print(f"Warning: could not cast '{col}' to {target_dtype} (schema says {expected}): {e}")
+    return df
 
 
 def push_to_hopsworks(df):
@@ -201,6 +211,7 @@ def push_to_hopsworks(df):
                                      # default to DELTA and breaks the plain
                                      # Python client. Force HUDI.
     )
+    df = align_dtypes_to_schema(df, feature_group)
     feature_group.insert(df, write_options={"wait_for_job": True})
     print(f"Feature group '{FEATURE_GROUP_NAME}' updated with {len(df)} rows.")
 
