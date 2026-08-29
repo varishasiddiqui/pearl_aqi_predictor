@@ -161,6 +161,26 @@ st.markdown("""<style>
     div[data-testid="stMetricValue"] { color: var(--ink) !important; }
     hr { border-color: var(--border) !important; }
 
+    /* ===== Layout safety: prevent left-clipping =====
+       Streamlit leaves padding-left on .block-container to make room for the
+       sidebar. The rules above hide the sidebar, so that padding only pushes
+       everything to the right and (on narrower viewports) clips the AQI hero
+       card and the Karachi tag off the left edge. Force-center the container. */
+    .stApp [data-testid="stMain"],
+    .stApp [data-testid="stMainBlockContainer"] {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    .block-container {
+        padding-top: 1rem; padding-bottom: 2rem;
+        padding-left: 1rem !important; padding-right: 1rem !important;
+        max-width: 1200px;
+        margin-left: auto !important; margin-right: auto !important;
+    }
+
     .footer-note {
         text-align: center; color: var(--ink-4);
         font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
@@ -390,7 +410,12 @@ try:
     cat, breathe_speed, color, cat_desc = aqi_info(current_aqi)
 
     # ===== TOP BAR =====
-    st.markdown(f"""
+    # NOTE: switched from st.markdown(..., unsafe_allow_html=True) to st.html()
+    # because st.html() bypasses Streamlit's markdown parser entirely. With
+    # the old path, any 4-space-indented HTML line inside an interpolated
+    # f-string could be mis-rendered as a fenced code block. This is a pure
+    # UI-rendering swap; no data/prediction logic touched.
+    st.html(f"""
     <div class='top-bar'>
         <div class='top-bar-left'>
             <span class='brand'>Pearl AQI</span>
@@ -404,27 +429,44 @@ try:
             <span class='clock'>{now_karachi.strftime('%a %d %b')}<br>{now_karachi.strftime('%I:%M %p')} PKT</span>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
     # ===== HERO ROW =====
+    # Build weather_html as a SINGLE-LINE string. Previously this was a
+    # triple-quoted f-string with a leading newline and 8-space indentation
+    # (because the source code itself is indented inside the if-branch).
+    # When that indented string was interpolated into the outer hero-row
+    # st.markdown f-string, Streamlit's markdown parser saw the 8-space-
+    # indented <div class='weather-grid'> line preceded by a blank line and
+    # interpreted it as a fenced code block — so the user saw the literal
+    # <div class='weather-grid'>...</div> source text on a dark background
+    # instead of the four weather cards. Building it as a single concatenated
+    # line removes any possibility of that misinterpretation.
     if weather_ok:
-        weather_html = f"""
-        <div class='weather-grid'>
-            <div class='w-card'><div class='w-label'>Temperature</div><div class='w-val'>{weather['temperature_2m']:.1f}°</div></div>
-            <div class='w-card'><div class='w-label'>Humidity</div><div class='w-val'>{weather['relative_humidity_2m']:.0f}%</div></div>
-            <div class='w-card'><div class='w-label'>Wind</div><div class='w-val'>{weather['wind_speed_10m']:.1f}<span style='font-size:12px;font-weight:500;color:var(--ink-3)'> km/h</span></div></div>
-            <div class='w-card'><div class='w-label'>Pressure</div><div class='w-val'>{weather['surface_pressure']:.0f}<span style='font-size:11px;font-weight:500;color:var(--ink-3)'> hPa</span></div></div>
-        </div>"""
+        weather_html = (
+            f"<div class='weather-grid'>"
+            f"<div class='w-card'><div class='w-label'>Temperature</div><div class='w-val'>{weather['temperature_2m']:.1f}°</div></div>"
+            f"<div class='w-card'><div class='w-label'>Humidity</div><div class='w-val'>{weather['relative_humidity_2m']:.0f}%</div></div>"
+            f"<div class='w-card'><div class='w-label'>Wind</div><div class='w-val'>{weather['wind_speed_10m']:.1f}<span style='font-size:12px;font-weight:500;color:var(--ink-3)'> km/h</span></div></div>"
+            f"<div class='w-card'><div class='w-label'>Pressure</div><div class='w-val'>{weather['surface_pressure']:.0f}<span style='font-size:11px;font-weight:500;color:var(--ink-3)'> hPa</span></div></div>"
+            f"</div>"
+        )
     else:
-        weather_html = f"""
-        <div class='weather-grid'>
-            <div class='w-card' style='grid-column:1/-1;align-items:center;text-align:center;'>
-                <div class='w-label'>Weather data</div>
-                <div style='font-size:13px;color:var(--ink-3);font-weight:500;margin-top:4px;'>Open-Meteo temporarily unavailable</div>
-            </div>
-        </div>"""
+        weather_html = (
+            f"<div class='weather-grid'>"
+            f"<div class='w-card' style='grid-column:1/-1;align-items:center;text-align:center;'>"
+            f"<div class='w-label'>Weather data</div>"
+            f"<div style='font-size:13px;color:var(--ink-3);font-weight:500;margin-top:4px;'>Open-Meteo temporarily unavailable</div>"
+            f"</div>"
+            f"</div>"
+        )
 
-    st.markdown(f"""
+    # Use st.html() instead of st.markdown(unsafe_allow_html=True) so the
+    # interpolated HTML is never run through the markdown parser at all.
+    # This is a UI/UX-only change: same HTML, same data, same layout — just a
+    # different rendering entry point that is robust against any future
+    # Streamlit markdown-parser quirks.
+    st.html(f"""
     <div class='hero-row'>
         <div class='hero-card' style='--accent:{color}; --breathe-speed:{breathe_speed}'>
             <div class='halo-mini'>
@@ -440,12 +482,12 @@ try:
         </div>
         {weather_html}
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
     # ===== POLLUTANT GAUGES =====
-    st.markdown("""<div class='panel'><div class='panel-head'>
+    st.html("""<div class='panel'><div class='panel-head'>
         <p class='panel-title'>Pollutant Levels</p>
-    </div>""", unsafe_allow_html=True)
+    </div>""")
     show_p = {k: v for k, v in pollution.items() if k not in ["no", "nh3"]}
     threshold = {"pm2_5": 75, "pm10": 150, "no2": 100, "so2": 75, "o3": 70, "co": 10000}
     gauges = "<div class='gauge-grid'>"
@@ -464,14 +506,14 @@ try:
             <span class='gauge-status' style='color:{gcolor}'>{status}</span>
         </div>"""
     gauges += "</div>"
-    st.markdown(gauges, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.html(gauges)
+    st.html("</div>")
 
     # ===== TODAY'S TREND =====
-    st.markdown("""<div class='panel'><div class='panel-head'>
+    st.html("""<div class='panel'><div class='panel-head'>
         <p class='panel-title'>Today's AQI Trend</p>
         <p class='panel-sub'>Measured · Predicted</p>
-    </div>""", unsafe_allow_html=True)
+    </div>""")
     try:
         if not hist_df.empty:
             hist_df = hist_df.copy().sort_values("datetime")
@@ -518,13 +560,13 @@ try:
             plt.close(fig)
     except Exception as e:
         st.warning(f"Trend: {e}")
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.html("</div>")
 
     # ===== 3-DAY FORECAST =====
-    st.markdown("""<div class='panel'><div class='panel-head'>
+    st.html("""<div class='panel'><div class='panel-head'>
         <p class='panel-title'>3-Day Forecast</p>
         <p class='panel-sub'>Hourly model prediction</p>
-    </div>""", unsafe_allow_html=True)
+    </div>""")
     try:
         if combined_df.empty:
             if not weather_ok:
@@ -547,13 +589,13 @@ try:
                     dc, _, dcol, _ = aqi_info(da)
                     dl = pd.Timestamp(day).strftime("%d %b · %a")
                     with day_cols[d]:
-                        st.markdown(f"""
+                        st.html(f"""
                         <div class='day-tile' style='border-color:{dcol}25'>
                             <p class='d-label'>{dl}</p>
                             <p class='d-val' style='color:{dcol}'>{da:.0f}</p>
                             <p class='d-cat' style='color:{dcol}'>{dc}</p>
                             <p class='d-range'>↓ {dmi:.0f} — {dmx:.0f} ↑</p>
-                        </div>""", unsafe_allow_html=True)
+                        </div>""")
                 fig, ax = plt.subplots(figsize=(12, 2.4))
                 fig.patch.set_facecolor("#FFFFFF")
                 ax.set_facecolor("#FAFBFC")
@@ -576,10 +618,10 @@ try:
                     gc, gt, gb = "#D97706", "Elevated AQI expected", "Sensitive groups should limit outdoor time."
                 else:
                     gc, gt, gb = "#059669", "Within safe range", "No elevated AQI expected."
-                st.markdown(f"""<div class='guidance' style='--gl-color:{gc}'><span class='g-dot'></span><div><p class='g-title'>{gt}</p><p class='g-body'>{gb}</p></div></div>""", unsafe_allow_html=True)
+                st.html(f"""<div class='guidance' style='--gl-color:{gc}'><span class='g-dot'></span><div><p class='g-title'>{gt}</p><p class='g-body'>{gb}</p></div></div>""")
     except Exception as e:
         st.error(f"Forecast: {e}")
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.html("</div>")
 
     # ===== GUIDANCE =====
     tips = {
@@ -591,9 +633,9 @@ try:
         "Hazardous": ("Emergency. Stay indoors, seek medical help if needed.", "#B91C1C"),
     }
     tb, tc = tips.get(cat, ("", color))
-    st.markdown(f"""<div class='guidance' style='--gl-color:{tc}'><span class='g-dot'></span><div><p class='g-title'>Right now: {cat}</p><p class='g-body'>{tb}</p></div></div>""", unsafe_allow_html=True)
+    st.html(f"""<div class='guidance' style='--gl-color:{tc}'><span class='g-dot'></span><div><p class='g-title'>Right now: {cat}</p><p class='g-body'>{tb}</p></div></div>""")
 
 except Exception as e:
     st.error(f"Error: {e}")
 
-st.markdown("<p class='footer-note'>PEARL AQI STATION · KARACHI · Hopsworks + OpenWeather + Open-Meteo</p>", unsafe_allow_html=True)
+st.html("<p class='footer-note'>PEARL AQI STATION · KARACHI · Hopsworks + OpenWeather + Open-Meteo</p>")
