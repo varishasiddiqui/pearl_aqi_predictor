@@ -177,7 +177,7 @@ def align_dtypes_to_schema(df, feature_group):
         "boolean": "bool",
         "string": "string",
     }
-    schema = {f.name: f.type for f in feature_group.features}
+    schema = {f.name: f.type for f in feature_group.features}  # still works; deprecated in favor of .columns in newer hopsworks-api, but that API's shape isn't confirmed here
     for col in df.columns:
         expected = schema.get(col)
         target_dtype = type_map.get(expected)
@@ -196,6 +196,7 @@ def align_dtypes_to_schema(df, feature_group):
 
 def push_to_hopsworks(df):
     import hopsworks
+    from hopsworks_common.client.exceptions import JobExecutionException
 
     project = hopsworks.login(api_key_value=HOPSWORKS_API_KEY)
     fs = project.get_feature_store()
@@ -212,7 +213,28 @@ def push_to_hopsworks(df):
                                      # Python client. Force HUDI.
     )
     df = align_dtypes_to_schema(df, feature_group)
-    feature_group.insert(df, write_options={"wait_for_job": True})
+    try:
+        feature_group.insert(df, write_options={"wait_for_job": True})
+    except JobExecutionException:
+        # The client only reports FAILED, not why — the real error lives in
+        # the Spark materialization job's own logs on the Hopsworks server.
+        # Pull and print them here so the actual cause shows up directly in
+        # the GitHub Actions log instead of requiring a manual UI visit.
+        print("Materialization job failed — fetching job logs from Hopsworks...")
+        try:
+            executions = feature_group.materialization_job.get_executions()
+            if executions:
+                out_log, err_log = executions[0].download_logs()
+                if err_log:
+                    print("--- stderr (tail) ---")
+                    print(open(err_log).read()[-6000:])
+                if out_log:
+                    print("--- stdout (tail) ---")
+                    print(open(out_log).read()[-3000:])
+        except Exception as log_err:
+            print(f"Could not fetch job logs automatically: {log_err}")
+            print(f"Check manually: {feature_group.materialization_job.get_url()}")
+        raise
     print(f"Feature group '{FEATURE_GROUP_NAME}' updated with {len(df)} rows.")
 
 
