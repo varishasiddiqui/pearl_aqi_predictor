@@ -1,4 +1,3 @@
-
 import argparse
 import os
 import time
@@ -94,6 +93,15 @@ def build_features(days):
     pollution_df = pd.DataFrame(pollution_rows).drop_duplicates(subset="datetime").sort_values("datetime")
     pollution_df = pollution_df.reset_index(drop=True)
 
+    # Force pollutant columns to float64. Without this, pandas infers dtype
+    # per-batch — if every reading for a pollutant (e.g. nh3) happens to be a
+    # whole number in a given run, pandas stores it as int64, which Hopworks
+    # sees as 'bigint' and rejects against the feature group's 'double' schema
+    # (locked in from an earlier run that had decimal values). This caused
+    # intermittent FeatureStoreException schema-mismatch failures.
+    pollutant_cols = [c for c in ["co", "no", "no2", "o3", "so2", "pm2_5", "pm10", "nh3"] if c in pollution_df.columns]
+    pollution_df[pollutant_cols] = pollution_df[pollutant_cols].astype(float)
+
     weather_raw = fetch_weather_history(LAT, LON, days)
     weather_df = pd.DataFrame({
         "datetime": pd.to_datetime(weather_raw["time"]).tz_localize("UTC").tz_convert(KARACHI_TZ),
@@ -159,6 +167,19 @@ def build_features(days):
     ]
     merged_df = merged_df.dropna(subset=feature_input_cols).reset_index(drop=True)
     print(f"Rows before dropna: {before} -> after: {len(merged_df)}")
+
+    # Same schema-drift risk as the pollutant columns above: Open-Meteo often
+    # returns humidity (and occasionally temperature/wind_speed/pressure) as
+    # whole numbers, which pandas would infer as int64 -> Hopsworks 'bigint'
+    # -> mismatch against the 'double' schema. Force these to float too.
+    double_cols = [
+        "temperature", "humidity", "wind_speed", "pressure", "aqi",
+        "aqi_lag_1", "aqi_lag_3", "aqi_lag_24", "pm25_lag_1", "pm25_lag_24",
+        "aqi_rolling_3", "aqi_rolling_6", "aqi_rolling_24", "pm25_rolling_24",
+        "target_aqi_24hr",
+    ]
+    double_cols = [c for c in double_cols if c in merged_df.columns]
+    merged_df[double_cols] = merged_df[double_cols].astype(float)
 
     return merged_df
 
