@@ -1,5 +1,3 @@
-
-
 import os
 
 import joblib
@@ -20,11 +18,22 @@ TIMESTEPS = 24  # for LSTM sequences
 
 def load_features():
     import hopsworks
+    from hopsworks_common.client.exceptions import FeatureStoreException
 
     project = hopsworks.login(api_key_value=HOPSWORKS_API_KEY)
     fs = project.get_feature_store()
     fg = fs.get_feature_group(name=FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
-    df = fg.read()
+
+    try:
+        df = fg.read(read_options={"arrow_flight_config": {"timeout": 30}})
+    except FeatureStoreException as e:
+        # Hopsworks' Arrow Flight "Query Service" is a separate, sometimes
+        # flaky component from the offline storage itself (this is the same
+        # class of transient server-side issue we've hit before — the data
+        # is fine, the read path is what's unavailable). Fall back to the
+        # older Hive-based read path instead of failing the whole run.
+        print(f"Query Service read failed ({e}); retrying via Hive fallback...")
+        df = fg.read(read_options={"use_hive": True})
 
     df = df.sort_values("datetime").reset_index(drop=True)
     # Rows ingested in the last ~24h legitimately have no target yet
