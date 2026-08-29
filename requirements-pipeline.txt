@@ -1,4 +1,4 @@
-hopsworks[python]>=4.0,<5.0
+hopsworks[python]>=5.0,<5.1
 shap
 scikit-learn<1.7
 tensorflow
