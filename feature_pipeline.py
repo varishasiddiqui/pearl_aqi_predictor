@@ -194,6 +194,32 @@ def align_dtypes_to_schema(df, feature_group):
     return df
 
 
+def _extract_real_errors(log_text, max_chars=5000):
+    """Filter out known-benign Spark shutdown/metrics noise and surface the
+    actual failure. The Prometheus-pushgateway SocketTimeoutException seen
+    during executor teardown is a documented cosmetic bug in Spark's
+    banzaicloud metrics sink (it fires even on a clean, successful shutdown)
+    — it is not itself a failure cause, so a plain tail of the log tends to
+    show this noise instead of the real error, which is usually earlier in
+    a large log."""
+    noise_markers = (
+        "PrometheusSink", "pushgateway", "PushGateway.java", "ScheduledReporter",
+        "CoarseGrainedExecutorBackend-stop-executor", "MetricsSystem.scala",
+        "com.codahale.metrics",
+    )
+    error_markers = (
+        "ERROR", "Exception", "FAILED", "Caused by", "OutOfMemory",
+        "Job aborted", "Traceback", "killed", "Killed",
+    )
+    real_lines = [
+        line for line in log_text.splitlines()
+        if not any(n in line for n in noise_markers) and any(e in line for e in error_markers)
+    ]
+    if real_lines:
+        return "\n".join(real_lines[-100:])[-max_chars:]
+    return "(no error lines found outside known Spark-metrics shutdown noise; showing raw tail)\n" + log_text[-max_chars:]
+
+
 def push_to_hopsworks(df):
     import hopsworks
     from hopsworks_common.client.exceptions import JobExecutionException
@@ -218,19 +244,20 @@ def push_to_hopsworks(df):
     except JobExecutionException:
         # The client only reports FAILED, not why — the real error lives in
         # the Spark materialization job's own logs on the Hopsworks server.
-        # Pull and print them here so the actual cause shows up directly in
-        # the GitHub Actions log instead of requiring a manual UI visit.
+        # Pull and print them here (noise-filtered) so the actual cause shows
+        # up directly in the GitHub Actions log instead of requiring a manual
+        # UI visit or scrolling through megabytes of raw Spark log.
         print("Materialization job failed — fetching job logs from Hopsworks...")
         try:
             executions = feature_group.materialization_job.get_executions()
             if executions:
                 out_log, err_log = executions[0].download_logs()
                 if err_log:
-                    print("--- stderr (tail) ---")
-                    print(open(err_log).read()[-6000:])
+                    print("--- stderr: real errors (Spark-metrics shutdown noise filtered out) ---")
+                    print(_extract_real_errors(open(err_log).read()))
                 if out_log:
-                    print("--- stdout (tail) ---")
-                    print(open(out_log).read()[-3000:])
+                    print("--- stdout: real errors (Spark-metrics shutdown noise filtered out) ---")
+                    print(_extract_real_errors(open(out_log).read(), max_chars=2000))
         except Exception as log_err:
             print(f"Could not fetch job logs automatically: {log_err}")
             print(f"Check manually: {feature_group.materialization_job.get_url()}")
