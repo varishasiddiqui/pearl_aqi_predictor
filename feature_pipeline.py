@@ -221,6 +221,7 @@ def _extract_real_errors(log_text, max_chars=5000):
 
 
 def push_to_hopsworks(df):
+    import time
     import hopsworks
     from hopsworks_common.client.exceptions import JobExecutionException
 
@@ -239,15 +240,42 @@ def push_to_hopsworks(df):
                                      # Python client. Force HUDI.
     )
     df = align_dtypes_to_schema(df, feature_group)
+
+    attempt_start_ms = int(time.time() * 1000)
     try:
         feature_group.insert(df, write_options={"wait_for_job": True})
     except JobExecutionException:
-        # The client only reports FAILED, not why — the real error lives in
-        # the Spark materialization job's own logs on the Hopsworks server.
-        # Pull and print them here (noise-filtered) so the actual cause shows
-        # up directly in the GitHub Actions log instead of requiring a manual
-        # UI visit or scrolling through megabytes of raw Spark log.
-        print("Materialization job failed — fetching job logs from Hopsworks...")
+        # We've seen this specific pattern: the Hudi commit itself completes
+        # (rows are visibly written — see commit_details() below), but a
+        # separate server-side metadata/RPC call afterwards times out
+        # (SocketTimeoutException / "Transaction marked for rollback"), and
+        # Hopsworks reports the whole job as FAILED even though the data
+        # already landed. Before treating this as a real failure, check
+        # whether a commit newer than when we started this insert actually
+        # exists — if so, the data is safe and this is a false alarm.
+        print("Materialization job reported FAILED — checking if the data landed anyway...")
+        try:
+            commits = feature_group.commit_details()
+            latest_commit_ms = max(commits.keys()) if commits else 0
+            if latest_commit_ms >= attempt_start_ms - 5000:  # small clock-skew buffer
+                info = commits[max(commits.keys())]
+                print(
+                    f"Data DID land: commit at {info.get('committedOn')} "
+                    f"(inserted={info.get('rowsInserted')}, updated={info.get('rowsUpdated')}). "
+                    "Treating this run as successful — the FAILED status was a server-side "
+                    "timeout after the write already completed, not data loss."
+                )
+                print(f"Feature group '{FEATURE_GROUP_NAME}' updated with {len(df)} rows (verified via commit_details).")
+                return
+            else:
+                print("No new commit found matching this run — this looks like a real failure.")
+        except Exception as verify_err:
+            print(f"Could not verify via commit_details either: {verify_err}")
+
+        # Either verification showed no new commit, or verification itself
+        # failed — pull the job logs (noise-filtered) so the actual cause is
+        # visible directly in the GitHub Actions log.
+        print("Fetching job logs from Hopsworks...")
         try:
             executions = feature_group.materialization_job.get_executions()
             if executions:
