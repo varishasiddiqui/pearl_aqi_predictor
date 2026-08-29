@@ -18,154 +18,351 @@ now_karachi = pd.Timestamp.now(tz="UTC").tz_convert(KARACHI_TZ)
 st.set_page_config(page_title="Pearl · AQI Station Karachi", layout="wide", page_icon="🌆")
 
 st.markdown("""<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
     :root{
-        --bg:#F4F6F9; --white:#FFFFFF; --white-2:#F8F9FB; --white-3:#EEF1F5;
-        --border:#E2E6ED; --border-2:#D1D5DE;
-        --ink:#0F172A; --ink-2:#334155; --ink-3:#64748B; --ink-4:#94A3B8;
-        --good:#059669; --moderate:#D97706; --uhfs:#EA580C;
-        --unhealthy:#DC2626; --very:#7C3AED; --hazard:#B91C1C;
-        --shadow:0 1px 2px rgba(0,0,0,0.05);
-        --shadow-sm:0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-        --shadow-md:0 4px 6px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.03);
-        --radius:12px; --radius-lg:16px;
+        /* Surfaces */
+        --bg: #F1F4F9;
+        --bg-2: #E8EDF5;
+        --white: #FFFFFF;
+        --white-2: #FAFBFD;
+        --white-3: #EEF1F5;
+        --border: #E2E6ED;
+        --border-2: #D1D5DE;
+        /* Ink */
+        --ink: #0B1220;
+        --ink-2: #1E293B;
+        --ink-3: #475569;
+        --ink-4: #94A3B8;
+        --ink-5: #CBD5E1;
+        /* Status palette */
+        --good: #059669;
+        --good-soft: #D1FAE5;
+        --moderate: #D97706;
+        --moderate-soft: #FEF3C7;
+        --uhfs: #EA580C;
+        --uhfs-soft: #FFEDD5;
+        --unhealthy: #DC2626;
+        --unhealthy-soft: #FEE2E2;
+        --very: #7C3AED;
+        --very-soft: #EDE9FE;
+        --hazard: #B91C1C;
+        --hazard-soft: #FECACA;
+        /* Brand */
+        --brand: #0F172A;
+        --brand-2: #1E293B;
+        --accent-blue: #2563EB;
+        --accent-blue-soft: #DBEAFE;
+        /* Shadows — stronger, more layered */
+        --shadow-xs: 0 1px 2px rgba(15,23,42,0.04);
+        --shadow-sm: 0 1px 2px rgba(15,23,42,0.04), 0 2px 6px rgba(15,23,42,0.05);
+        --shadow-md: 0 4px 10px rgba(15,23,42,0.06), 0 2px 6px rgba(15,23,42,0.04);
+        --shadow-lg: 0 10px 24px rgba(15,23,42,0.08), 0 4px 8px rgba(15,23,42,0.04);
+        --shadow-glow: 0 0 0 1px rgba(15,23,42,0.04), 0 8px 28px rgba(15,23,42,0.10);
+        /* Radius */
+        --radius: 14px;
+        --radius-lg: 18px;
+        --radius-xl: 22px;
     }
 
     html, body, [class*="st-"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
-    .stApp { background: var(--bg) !important; }
-    .block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 1200px; }
+    .stApp {
+        background: var(--bg) !important;
+        background-image:
+            radial-gradient(1200px 600px at 0% -5%, rgba(37,99,235,0.05), transparent 60%),
+            radial-gradient(900px 500px at 100% 0%, rgba(217,119,6,0.04), transparent 55%) !important;
+        background-attachment: fixed !important;
+    }
+    .block-container { padding-top: 1.25rem; padding-bottom: 2.5rem; max-width: 1240px; }
     h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; color: var(--ink) !important; letter-spacing: -0.025em; }
     p, span, label, div { color: var(--ink-2); }
 
+    /* Hide Streamlit chrome */
     [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"],
     section[data-testid="stSidebar"], button[kind="header"],
     [data-testid="stToolbar"], [data-testid="stHeader"],
     .stApp header, .stApp > header,
     .stApp > div > div > header {
-        display: none !important;
-        width: 0 !important; height: 0 !important;
+        display: none !important; width: 0 !important; height: 0 !important;
         min-width: 0 !important; min-height: 0 !important;
         padding: 0 !important; margin: 0 !important;
         overflow: hidden !important; border: none !important;
     }
 
+    /* ===== TOP BAR ===== */
     .top-bar {
         display: flex; align-items: center; justify-content: space-between;
-        padding: 10px 0 8px; flex-wrap: wrap; gap: 6px;
+        padding: 6px 4px 14px; flex-wrap: wrap; gap: 8px;
     }
-    .top-bar-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-    .top-bar-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-    .brand { font-weight: 800; font-size: 17px; color: var(--ink); letter-spacing: -0.03em; white-space: nowrap; }
+    .top-bar-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .top-bar-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .brand {
+        font-weight: 800; font-size: 18px; color: var(--ink);
+        letter-spacing: -0.035em; white-space: nowrap;
+        display: inline-flex; align-items: center; gap: 8px;
+    }
+    .brand::before {
+        content: ''; width: 22px; height: 22px; border-radius: 7px;
+        background: linear-gradient(135deg, #2563EB 0%, #1E40AF 100%);
+        box-shadow: 0 4px 10px rgba(37,99,235,0.30), inset 0 1px 0 rgba(255,255,255,0.3);
+    }
     .tag {
         font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500;
-        color: var(--ink-3); background: var(--white); border: 1px solid var(--border);
-        padding: 3px 8px; border-radius: 6px; white-space: nowrap;
+        color: var(--ink-3); background: var(--white);
+        border: 1px solid var(--border); padding: 4px 9px; border-radius: 7px;
+        white-space: nowrap;
+        box-shadow: var(--shadow-xs);
+        display: inline-flex; align-items: center;
+        transition: transform 0.15s, box-shadow 0.15s;
     }
-    .tag-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-    .tag-dot-on { background: var(--good); }
+    .tag:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+    .tag-dot {
+        display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+        margin-right: 6px; vertical-align: middle;
+        box-shadow: 0 0 0 2px rgba(255,255,255,0.6);
+    }
+    .tag-dot-on { background: var(--good); box-shadow: 0 0 0 2px rgba(5,150,105,0.15), 0 0 8px rgba(5,150,105,0.6); }
     .tag-dot-off { background: var(--ink-4); }
     .clock {
         font-family: 'JetBrains Mono', monospace; font-size: 11px;
         color: var(--ink-3); text-align: right; white-space: nowrap;
+        line-height: 1.45;
     }
+    .clock .clock-date { color: var(--ink-2); font-weight: 600; }
+    .clock .clock-time { color: var(--ink-4); font-size: 10.5px; }
 
-    .hero-row { display: flex; gap: 16px; margin: 8px 0 12px; align-items: stretch; }
+    /* ===== HERO ROW ===== */
+    .hero-row { display: flex; gap: 18px; margin: 4px 0 18px; align-items: stretch; }
     .hero-card {
-        background: var(--white); border: 1px solid var(--border);
-        border-radius: var(--radius-lg); padding: 24px 28px;
-        box-shadow: var(--shadow-sm); flex-shrink: 0;
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xl);
+        padding: 26px 30px 24px;
+        box-shadow: var(--shadow-md);
+        flex-shrink: 0;
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        min-width: 200px; position: relative; overflow: hidden;
+        min-width: 220px; position: relative; overflow: hidden;
+        transition: box-shadow 0.25s, transform 0.2s;
     }
     .hero-card::before {
-        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-        background: var(--accent);
+        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+        background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #ffffff));
     }
-    .hero-label { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; font-weight: 500; }
-    .hero-cat { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; font-weight: 500; }
-    .hero-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-4); margin-top: 8px; }
+    .hero-card::after {
+        content: ''; position: absolute; inset: 0;
+        background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 70%);
+        pointer-events: none;
+    }
+    .hero-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+    .hero-label {
+        font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+        color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.12em;
+        margin-bottom: 10px; font-weight: 600;
+        position: relative; z-index: 1;
+    }
+    .hero-cat {
+        font-family: 'JetBrains Mono', monospace; font-size: 11px;
+        color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em;
+        margin-top: 6px; font-weight: 700;
+        padding: 3px 10px; border-radius: 999px;
+        background: color-mix(in srgb, var(--accent) 12%, var(--white));
+        border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+        position: relative; z-index: 1;
+    }
+    .hero-sub {
+        font-family: 'JetBrains Mono', monospace; font-size: 10px;
+        color: var(--ink-3); margin-top: 10px; font-weight: 500;
+        position: relative; z-index: 1;
+    }
 
     .weather-grid {
-        flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+        flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
     }
     @media (max-width: 700px) { .weather-grid { grid-template-columns: repeat(2, 1fr); } }
     .w-card {
-        background: var(--white); border: 1px solid var(--border);
-        border-radius: var(--radius); padding: 16px 18px;
-        box-shadow: var(--shadow-sm); display: flex; flex-direction: column; justify-content: center;
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 16px 18px 14px;
+        box-shadow: var(--shadow-sm);
+        display: flex; flex-direction: column; justify-content: space-between;
+        gap: 10px;
+        position: relative; overflow: hidden;
+        transition: box-shadow 0.25s, transform 0.2s, border-color 0.25s;
     }
-    .w-label { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; font-weight: 500; }
-    .w-val { font-weight: 700; font-size: 22px; color: var(--ink); line-height: 1.1; }
+    .w-card::before {
+        content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+        background: var(--w-accent, var(--ink-5));
+        opacity: 0.85;
+    }
+    .w-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: var(--w-accent, var(--border-2)); }
+    .w-card-top { display: flex; align-items: center; justify-content: space-between; }
+    .w-icon {
+        width: 30px; height: 30px; border-radius: 9px;
+        display: flex; align-items: center; justify-content: center;
+        background: color-mix(in srgb, var(--w-accent, #94A3B8) 13%, var(--white));
+        color: var(--w-accent, var(--ink-4));
+        border: 1px solid color-mix(in srgb, var(--w-accent, #94A3B8) 18%, transparent);
+    }
+    .w-icon svg { width: 16px; height: 16px; display: block; }
+    .w-label {
+        font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+        color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.1em;
+        font-weight: 600;
+    }
+    .w-val {
+        font-weight: 800; font-size: 24px; color: var(--ink);
+        line-height: 1.05; letter-spacing: -0.025em;
+        display: flex; align-items: baseline; gap: 3px;
+    }
+    .w-val .w-unit {
+        font-size: 11px; font-weight: 500; color: var(--ink-3);
+        letter-spacing: 0;
+    }
 
+    /* ===== Halo / AQI ring ===== */
     .halo-mini {
-        width: 120px; height: 120px; border-radius: 50%; position: relative;
-        display: flex; align-items: center; justify-content: center; margin-bottom: 8px;
+        width: 130px; height: 130px; border-radius: 50%; position: relative;
+        display: flex; align-items: center; justify-content: center; margin-bottom: 10px;
     }
     .halo-mini-ring {
         position: absolute; inset: 0; border-radius: 50%;
-        border: 2px solid var(--accent); opacity: 0.25;
+        border: 2.5px solid var(--accent); opacity: 0.30;
         animation: breathe var(--breathe-speed) ease-in-out infinite;
     }
-    .halo-mini-ring.r2 { inset: 8px; animation-delay: calc(var(--breathe-speed) / -2); opacity: 0.15; }
+    .halo-mini-ring.r2 { inset: 9px; animation-delay: calc(var(--breathe-speed) / -2); opacity: 0.18; }
+    .halo-mini-ring.r3 { inset: 18px; animation-delay: calc(var(--breathe-speed) / -4); opacity: 0.10; }
     .halo-mini-core {
-        width: 96px; height: 96px; border-radius: 50%;
-        background: var(--white); border: 1px solid var(--border);
+        width: 104px; height: 104px; border-radius: 50%;
+        background: var(--white);
         display: flex; align-items: center; justify-content: center; z-index: 2;
-        box-shadow: var(--shadow-md);
+        box-shadow: 0 0 0 6px var(--white), 0 8px 24px color-mix(in srgb, var(--accent) 25%, transparent);
+        border: 2px solid color-mix(in srgb, var(--accent) 80%, var(--white));
     }
     @keyframes breathe {
-        0%, 100% { transform: scale(1); opacity: 0.25; }
-        50% { transform: scale(1.1); opacity: 0.06; }
+        0%, 100% { transform: scale(1); opacity: 0.30; }
+        50% { transform: scale(1.12); opacity: 0.06; }
     }
     @media (prefers-reduced-motion: reduce) { .halo-mini-ring { animation: none !important; } }
 
+    /* ===== PANELS ===== */
     .panel {
         background: var(--white); border: 1px solid var(--border);
-        border-radius: var(--radius-lg); padding: 20px 24px;
-        margin: 12px 0; box-shadow: var(--shadow-sm);
+        border-radius: var(--radius-xl); padding: 22px 26px 24px;
+        margin: 14px 0; box-shadow: var(--shadow-sm);
+        transition: box-shadow 0.25s;
     }
-    .panel-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
-    .panel-title { font-weight: 700; font-size: 14px; color: var(--ink); margin: 0; }
-    .panel-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
+    .panel:hover { box-shadow: var(--shadow-md); }
+    .panel-head {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 16px; padding-bottom: 14px;
+        border-bottom: 1px solid var(--white-3);
+    }
+    .panel-head-left { display: flex; flex-direction: column; gap: 3px; }
+    .panel-title { font-weight: 800; font-size: 15px; color: var(--ink); margin: 0; letter-spacing: -0.015em; }
+    .panel-eyebrow {
+        font-family: 'JetBrains Mono', monospace; font-size: 9px;
+        color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.14em; font-weight: 600;
+    }
+    .panel-sub {
+        font-family: 'JetBrains Mono', monospace; font-size: 10px;
+        color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 500;
+    }
 
-    .gauge-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+    /* ===== POLLUTANT GAUGES ===== */
+    .gauge-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; }
     @media (max-width: 900px) { .gauge-grid { grid-template-columns: repeat(3, 1fr); } }
-    .gauge-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-    .gauge-name { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-4); letter-spacing: 0.03em; font-weight: 500; }
-    .gauge-val { font-weight: 700; font-size: 12px; }
-    .gauge-status { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; font-weight: 500; }
+    .gauge-cell {
+        display: flex; flex-direction: column; align-items: center; gap: 9px;
+        padding: 10px 6px; border-radius: var(--radius);
+        transition: background 0.2s;
+    }
+    .gauge-cell:hover { background: var(--white-3); }
+    .gauge-ring-wrap { position: relative; width: 64px; height: 64px; }
+    .gauge-ring-wrap::after {
+        content: ''; position: absolute; inset: 2px; border-radius: 50%;
+        box-shadow: 0 4px 12px color-mix(in srgb, var(--g-color, #94A3B8) 25%, transparent);
+        opacity: 0.6;
+    }
+    .gauge-name {
+        font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+        color: var(--ink-3); letter-spacing: 0.06em; font-weight: 700;
+    }
+    .gauge-val { font-weight: 800; font-size: 14px; letter-spacing: -0.02em; }
+    .gauge-status {
+        font-family: 'JetBrains Mono', monospace; font-size: 9px;
+        text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em;
+        padding: 2px 8px; border-radius: 999px;
+        background: color-mix(in srgb, var(--g-color, #94A3B8) 12%, var(--white));
+    }
 
+    /* ===== DAY TILES ===== */
     .day-tile {
-        text-align: center; padding: 16px 12px; border-radius: var(--radius);
-        background: var(--white); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
-        transition: box-shadow 0.2s, transform 0.15s;
-    }
-    .day-tile:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
-    .day-tile .d-label { font-family: 'JetBrains Mono', monospace; color: var(--ink-4); font-size: 10px; margin: 0; letter-spacing: 0.03em; font-weight: 500; }
-    .day-tile .d-val { font-weight: 800; font-size: 28px; margin: 6px 0 2px; }
-    .day-tile .d-cat { font-family: 'JetBrains Mono', monospace; font-size: 10px; margin: 0; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 500; }
-    .day-tile .d-range { font-family: 'JetBrains Mono', monospace; color: var(--ink-4); font-size: 9.5px; margin-top: 8px; }
-
-    .guidance {
-        display: flex; gap: 12px; align-items: flex-start; padding: 14px 18px;
-        border-radius: var(--radius); border: 1px solid var(--gl-color);
-        background: color-mix(in srgb, var(--gl-color) 5%, var(--white));
+        text-align: center; padding: 18px 12px 14px; border-radius: var(--radius-lg);
+        background: var(--white); border: 1px solid var(--border);
         box-shadow: var(--shadow-sm);
+        transition: box-shadow 0.25s, transform 0.2s, border-color 0.25s;
+        position: relative; overflow: hidden;
     }
-    .guidance .g-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gl-color); margin-top: 5px; flex-shrink: 0; }
-    .guidance .g-title { font-weight: 600; font-size: 13px; color: var(--ink); margin: 0 0 2px; }
-    .guidance .g-body { font-size: 12px; color: var(--ink-3); margin: 0; line-height: 1.45; }
+    .day-tile::before {
+        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+        background: var(--d-color, var(--ink-5));
+    }
+    .day-tile:hover {
+        box-shadow: var(--shadow-md); transform: translateY(-2px);
+        border-color: color-mix(in srgb, var(--d-color, var(--border-2)) 50%, var(--border));
+    }
+    .day-tile .d-label {
+        font-family: 'JetBrains Mono', monospace; color: var(--ink-3);
+        font-size: 10.5px; margin: 0; letter-spacing: 0.04em; font-weight: 600;
+    }
+    .day-tile .d-val { font-weight: 900; font-size: 32px; margin: 8px 0 4px; letter-spacing: -0.025em; }
+    .day-tile .d-cat {
+        font-family: 'JetBrains Mono', monospace; font-size: 10px; margin: 0;
+        text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
+        padding: 2px 8px; border-radius: 999px;
+        background: color-mix(in srgb, var(--d-color, var(--ink-4)) 12%, var(--white));
+        display: inline-block;
+    }
+    .day-tile .d-range {
+        font-family: 'JetBrains Mono', monospace; color: var(--ink-4);
+        font-size: 10px; margin-top: 10px; font-weight: 500;
+        padding-top: 8px; border-top: 1px dashed var(--white-3);
+    }
+
+    /* ===== GUIDANCE ===== */
+    .guidance {
+        display: flex; gap: 14px; align-items: flex-start; padding: 16px 20px;
+        border-radius: var(--radius-lg); border: 1px solid color-mix(in srgb, var(--gl-color) 30%, var(--border));
+        background: linear-gradient(135deg,
+            color-mix(in srgb, var(--gl-color) 10%, var(--white)) 0%,
+            color-mix(in srgb, var(--gl-color) 4%, var(--white)) 100%);
+        box-shadow: var(--shadow-sm);
+        position: relative; overflow: hidden;
+    }
+    .guidance::before {
+        content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+        background: var(--gl-color);
+    }
+    .guidance .g-dot {
+        width: 32px; height: 32px; border-radius: 10px;
+        background: var(--gl-color); margin-top: 1px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 4px 10px color-mix(in srgb, var(--gl-color) 35%, transparent);
+        position: relative;
+    }
+    .guidance .g-dot::after {
+        content: ''; width: 8px; height: 8px; border-radius: 50%;
+        background: var(--white); box-shadow: 0 0 0 3px rgba(255,255,255,0.3);
+    }
+    .guidance .g-title { font-weight: 700; font-size: 13.5px; color: var(--ink); margin: 0 0 3px; letter-spacing: -0.01em; }
+    .guidance .g-body { font-size: 12px; color: var(--ink-3); margin: 0; line-height: 1.5; }
 
     .stAlert { border-radius: var(--radius) !important; background: var(--white) !important; border: 1px solid var(--border) !important; }
     div[data-testid="stMetricValue"] { color: var(--ink) !important; }
     hr { border-color: var(--border) !important; }
 
-    /* ===== Layout safety: prevent left-clipping =====
-       Streamlit leaves padding-left on .block-container to make room for the
-       sidebar. The rules above hide the sidebar, so that padding only pushes
-       everything to the right and (on narrower viewports) clips the AQI hero
-       card and the Karachi tag off the left edge. Force-center the container. */
+    /* ===== Layout safety: prevent left-clipping ===== */
     .stApp [data-testid="stMain"],
     .stApp [data-testid="stMainBlockContainer"] {
         margin-left: 0 !important;
@@ -175,16 +372,18 @@ st.markdown("""<style>
         max-width: 100% !important;
     }
     .block-container {
-        padding-top: 1rem; padding-bottom: 2rem;
-        padding-left: 1rem !important; padding-right: 1rem !important;
-        max-width: 1200px;
+        padding-top: 1.25rem !important; padding-bottom: 2.5rem !important;
+        padding-left: 1.25rem !important; padding-right: 1.25rem !important;
+        max-width: 1240px !important;
         margin-left: auto !important; margin-right: auto !important;
     }
 
     .footer-note {
         text-align: center; color: var(--ink-4);
         font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
-        letter-spacing: 0.05em; margin-top: 8px; font-weight: 500;
+        letter-spacing: 0.08em; margin-top: 16px; font-weight: 500;
+        padding: 14px 0 0;
+        border-top: 1px solid var(--border);
     }
 </style>""", unsafe_allow_html=True)
 
@@ -419,14 +618,14 @@ try:
     <div class='top-bar'>
         <div class='top-bar-left'>
             <span class='brand'>Pearl AQI</span>
-            <span class='tag'>Karachi 24.86°N</span>
+            <span class='tag'><svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' style='margin-right:4px;color:var(--accent-blue)'><path d='M12 22s-8-7.58-8-13a8 8 0 1 1 16 0c0 5.42-8 13-8 13z'/><circle cx='12' cy='9' r='2.5'/></svg>Karachi 24.86°N</span>
             <span class='tag'><span class='tag-dot {"tag-dot-on" if _has_ow else "tag-dot-off"}'></span>OpenWeather</span>
             <span class='tag'><span class='tag-dot {"tag-dot-on" if _has_hw else "tag-dot-off"}'></span>Hopsworks</span>
             <span class='tag'>Model: {model_source}</span>
             <span class='tag'>{len(feature_cols)} features</span>
         </div>
         <div class='top-bar-right'>
-            <span class='clock'>{now_karachi.strftime('%a %d %b')}<br>{now_karachi.strftime('%I:%M %p')} PKT</span>
+            <span class='clock'><span class='clock-date'>{now_karachi.strftime('%a %d %b')}</span><br><span class='clock-time'>{now_karachi.strftime('%I:%M %p')} PKT</span></span>
         </div>
     </div>
     """)
@@ -443,18 +642,37 @@ try:
     # instead of the four weather cards. Building it as a single concatenated
     # line removes any possibility of that misinterpretation.
     if weather_ok:
+        # Inline SVG icons (Feather/Lucide style, 18x18). Each <svg> uses
+        # stroke="currentColor" fill="none" so the icon inherits the card's
+        # accent color via the --w-accent CSS variable set on the parent.
+        icon_temp = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 4v10.5a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0z'/></svg>")
+        icon_hum   = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2.69l5.66 5.66a8 8 0 1 1-11.32 0z'/></svg>")
+        icon_wind  = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16h2m-6.41-7.41A2 2 0 1 1 14 12H2m16.41 4.59A2 2 0 1 1 20 20H2'/></svg>")
+        icon_press = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></svg>")
         weather_html = (
             f"<div class='weather-grid'>"
-            f"<div class='w-card'><div class='w-label'>Temperature</div><div class='w-val'>{weather['temperature_2m']:.1f}°</div></div>"
-            f"<div class='w-card'><div class='w-label'>Humidity</div><div class='w-val'>{weather['relative_humidity_2m']:.0f}%</div></div>"
-            f"<div class='w-card'><div class='w-label'>Wind</div><div class='w-val'>{weather['wind_speed_10m']:.1f}<span style='font-size:12px;font-weight:500;color:var(--ink-3)'> km/h</span></div></div>"
-            f"<div class='w-card'><div class='w-label'>Pressure</div><div class='w-val'>{weather['surface_pressure']:.0f}<span style='font-size:11px;font-weight:500;color:var(--ink-3)'> hPa</span></div></div>"
+            f"<div class='w-card' style='--w-accent:#EF4444'>"
+            f"<div class='w-card-top'><span class='w-label'>Temperature</span><span class='w-icon'>{icon_temp}</span></div>"
+            f"<div class='w-val'>{weather['temperature_2m']:.1f}°<span class='w-unit'>C</span></div>"
+            f"</div>"
+            f"<div class='w-card' style='--w-accent:#0EA5E9'>"
+            f"<div class='w-card-top'><span class='w-label'>Humidity</span><span class='w-icon'>{icon_hum}</span></div>"
+            f"<div class='w-val'>{weather['relative_humidity_2m']:.0f}<span class='w-unit'>%</span></div>"
+            f"</div>"
+            f"<div class='w-card' style='--w-accent:#14B8A6'>"
+            f"<div class='w-card-top'><span class='w-label'>Wind</span><span class='w-icon'>{icon_wind}</span></div>"
+            f"<div class='w-val'>{weather['wind_speed_10m']:.1f}<span class='w-unit'>km/h</span></div>"
+            f"</div>"
+            f"<div class='w-card' style='--w-accent:#8B5CF6'>"
+            f"<div class='w-card-top'><span class='w-label'>Pressure</span><span class='w-icon'>{icon_press}</span></div>"
+            f"<div class='w-val'>{weather['surface_pressure']:.0f}<span class='w-unit'>hPa</span></div>"
+            f"</div>"
             f"</div>"
         )
     else:
         weather_html = (
             f"<div class='weather-grid'>"
-            f"<div class='w-card' style='grid-column:1/-1;align-items:center;text-align:center;'>"
+            f"<div class='w-card' style='grid-column:1/-1;align-items:center;text-align:center;justify-content:center;'>"
             f"<div class='w-label'>Weather data</div>"
             f"<div style='font-size:13px;color:var(--ink-3);font-weight:500;margin-top:4px;'>Open-Meteo temporarily unavailable</div>"
             f"</div>"
@@ -472,8 +690,9 @@ try:
             <div class='halo-mini'>
                 <div class='halo-mini-ring'></div>
                 <div class='halo-mini-ring r2'></div>
+                <div class='halo-mini-ring r3'></div>
                 <div class='halo-mini-core'>
-                    <span style='font-weight:800;font-size:36px;color:{color};line-height:1'>{current_aqi:.0f}</span>
+                    <span style='font-weight:900;font-size:42px;color:{color};line-height:1;letter-spacing:-0.04em'>{current_aqi:.0f}</span>
                 </div>
             </div>
             <div class='hero-label'>Air Quality Index</div>
@@ -486,7 +705,7 @@ try:
 
     # ===== POLLUTANT GAUGES =====
     st.html("""<div class='panel'><div class='panel-head'>
-        <p class='panel-title'>Pollutant Levels</p>
+        <div class='panel-head-left'><span class='panel-eyebrow'>Live readings</span><p class='panel-title'>Pollutant Levels</p></div>
     </div>""")
     show_p = {k: v for k, v in pollution.items() if k not in ["no", "nh3"]}
     threshold = {"pm2_5": 75, "pm10": 150, "no2": 100, "so2": 75, "o3": 70, "co": 10000}
@@ -496,10 +715,12 @@ try:
         status = "Low" if pct < 40 else "Moderate" if pct < 70 else "High"
         gcolor = "#059669" if pct < 40 else "#D97706" if pct < 70 else "#DC2626"
         gauges += f"""
-        <div class='gauge-cell'>
-            <div style='width:52px;height:52px;border-radius:50%;background:conic-gradient({gcolor} {pct:.0f}%, var(--white-3) {pct:.0f}% 100%);display:flex;align-items:center;justify-content:center;'>
-                <div style='width:40px;height:40px;border-radius:50%;background:var(--white);display:flex;align-items:center;justify-content:center;'>
-                    <span class='gauge-val' style='color:{gcolor}'>{val:.0f}</span>
+        <div class='gauge-cell' style='--g-color:{gcolor}'>
+            <div class='gauge-ring-wrap'>
+                <div style='width:64px;height:64px;border-radius:50%;background:conic-gradient({gcolor} {pct:.0f}%, var(--white-3) {pct:.0f}% 100%);display:flex;align-items:center;justify-content:center;position:relative;z-index:1;'>
+                    <div style='width:48px;height:48px;border-radius:50%;background:var(--white);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--white-3);'>
+                        <span class='gauge-val' style='color:{gcolor}'>{val:.0f}</span>
+                    </div>
                 </div>
             </div>
             <span class='gauge-name'>{p.upper()}</span>
@@ -511,7 +732,7 @@ try:
 
     # ===== TODAY'S TREND =====
     st.html("""<div class='panel'><div class='panel-head'>
-        <p class='panel-title'>Today's AQI Trend</p>
+        <div class='panel-head-left'><span class='panel-eyebrow'>Today · {now_karachi.strftime('%d %b')}</span><p class='panel-title'>AQI Trend</p></div>
         <p class='panel-sub'>Measured · Predicted</p>
     </div>""")
     try:
@@ -564,7 +785,7 @@ try:
 
     # ===== 3-DAY FORECAST =====
     st.html("""<div class='panel'><div class='panel-head'>
-        <p class='panel-title'>3-Day Forecast</p>
+        <div class='panel-head-left'><span class='panel-eyebrow'>Next 72 hours</span><p class='panel-title'>3-Day Forecast</p></div>
         <p class='panel-sub'>Hourly model prediction</p>
     </div>""")
     try:
@@ -590,7 +811,7 @@ try:
                     dl = pd.Timestamp(day).strftime("%d %b · %a")
                     with day_cols[d]:
                         st.html(f"""
-                        <div class='day-tile' style='border-color:{dcol}25'>
+                        <div class='day-tile' style='--d-color:{dcol}'>
                             <p class='d-label'>{dl}</p>
                             <p class='d-val' style='color:{dcol}'>{da:.0f}</p>
                             <p class='d-cat' style='color:{dcol}'>{dc}</p>
