@@ -38,7 +38,6 @@ st.markdown("""<style>
     h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; color: var(--ink) !important; letter-spacing: -0.025em; }
     p, span, label, div { color: var(--ink-2); }
 
-    /* ===== Kill sidebar completely ===== */
     [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"],
     section[data-testid="stSidebar"], button[kind="header"],
     [data-testid="stToolbar"], [data-testid="stHeader"],
@@ -51,7 +50,6 @@ st.markdown("""<style>
         overflow: hidden !important; border: none !important;
     }
 
-    /* ===== Top info bar ===== */
     .top-bar {
         display: flex; align-items: center; justify-content: space-between;
         padding: 10px 0 8px; flex-wrap: wrap; gap: 6px;
@@ -72,7 +70,6 @@ st.markdown("""<style>
         color: var(--ink-3); text-align: right; white-space: nowrap;
     }
 
-    /* ===== Hero row: AQI + weather side by side ===== */
     .hero-row { display: flex; gap: 16px; margin: 8px 0 12px; align-items: stretch; }
     .hero-card {
         background: var(--white); border: 1px solid var(--border);
@@ -86,11 +83,9 @@ st.markdown("""<style>
         background: var(--accent);
     }
     .hero-label { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; font-weight: 500; }
-    .hero-value { font-weight: 800; font-size: 52px; line-height: 1; color: var(--accent); }
     .hero-cat { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; font-weight: 500; }
     .hero-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-4); margin-top: 8px; }
 
-    /* Weather grid in hero row */
     .weather-grid {
         flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
     }
@@ -103,7 +98,6 @@ st.markdown("""<style>
     .w-label { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; font-weight: 500; }
     .w-val { font-weight: 700; font-size: 22px; color: var(--ink); line-height: 1.1; }
 
-    /* ===== Breathing halo (mini, inside hero card) ===== */
     .halo-mini {
         width: 120px; height: 120px; border-radius: 50%; position: relative;
         display: flex; align-items: center; justify-content: center; margin-bottom: 8px;
@@ -126,7 +120,6 @@ st.markdown("""<style>
     }
     @media (prefers-reduced-motion: reduce) { .halo-mini-ring { animation: none !important; } }
 
-    /* ===== Panel ===== */
     .panel {
         background: var(--white); border: 1px solid var(--border);
         border-radius: var(--radius-lg); padding: 20px 24px;
@@ -136,7 +129,6 @@ st.markdown("""<style>
     .panel-title { font-weight: 700; font-size: 14px; color: var(--ink); margin: 0; }
     .panel-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
 
-    /* ===== Pollutant Gauges ===== */
     .gauge-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
     @media (max-width: 900px) { .gauge-grid { grid-template-columns: repeat(3, 1fr); } }
     .gauge-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
@@ -144,7 +136,6 @@ st.markdown("""<style>
     .gauge-val { font-weight: 700; font-size: 12px; }
     .gauge-status { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; font-weight: 500; }
 
-    /* ===== Forecast tiles ===== */
     .day-tile {
         text-align: center; padding: 16px 12px; border-radius: var(--radius);
         background: var(--white); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
@@ -156,7 +147,6 @@ st.markdown("""<style>
     .day-tile .d-cat { font-family: 'JetBrains Mono', monospace; font-size: 10px; margin: 0; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 500; }
     .day-tile .d-range { font-family: 'JetBrains Mono', monospace; color: var(--ink-4); font-size: 9.5px; margin-top: 8px; }
 
-    /* ===== Guidance ===== */
     .guidance {
         display: flex; gap: 12px; align-items: flex-start; padding: 14px 18px;
         border-radius: var(--radius); border: 1px solid var(--gl-color);
@@ -252,54 +242,69 @@ def fetch_recent_actuals_from_feature_store(lookback_hours=72):
 def fetch_current_data():
     API_KEY = st.secrets.get("OPENWEATHER_API_KEY", "")
 
+    # ---- Pollution (OpenWeather) ----
     curr_url = (f"http://api.openweathermap.org/data/2.5/air_pollution"
                 f"?lat={LAT}&lon={LON}&appid={API_KEY}")
     curr_resp = requests.get(curr_url, timeout=15)
     curr_resp.raise_for_status()
     pollution = curr_resp.json()["list"][0]["components"]
 
-    fc_url = (f"http://api.openweathermap.org/data/2.5/air_pollution/forecast"
-              f"?lat={LAT}&lon={LON}&appid={API_KEY}")
-    fc_resp = requests.get(fc_url, timeout=15)
-    fc_resp.raise_for_status()
-    fc_list = fc_resp.json().get("list", [])
-    poll_forecast_df = pd.DataFrame([
-        {"datetime": pd.to_datetime(item["dt"], unit="s", utc=True).tz_convert(KARACHI_TZ),
-         **item["components"]}
-        for item in fc_list
-    ])
-    if not poll_forecast_df.empty:
-        poll_forecast_df["datetime"] = poll_forecast_df["datetime"].dt.as_unit("ns")
+    # ---- Pollutant forecast (OpenWeather) ----
+    poll_forecast_df = pd.DataFrame()
+    try:
+        fc_url = (f"http://api.openweathermap.org/data/2.5/air_pollution/forecast"
+                  f"?lat={LAT}&lon={LON}&appid={API_KEY}")
+        fc_resp = requests.get(fc_url, timeout=15)
+        fc_resp.raise_for_status()
+        fc_list = fc_resp.json().get("list", [])
+        poll_forecast_df = pd.DataFrame([
+            {"datetime": pd.to_datetime(item["dt"], unit="s", utc=True).tz_convert(KARACHI_TZ),
+             **item["components"]}
+            for item in fc_list
+        ])
+        if not poll_forecast_df.empty:
+            poll_forecast_df["datetime"] = poll_forecast_df["datetime"].dt.as_unit("ns")
+    except Exception:
+        pass
 
-    w_url = ("https://api.open-meteo.com/v1/forecast"
-             f"?latitude={LAT}&longitude={LON}"
-             "&current=temperature_2m,relative_humidity_2m,wind_speed_10m,surface_pressure"
-             "&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,surface_pressure"
-             "&forecast_days=4")
-    w_resp = requests.get(w_url, timeout=15)
-    w_resp.raise_for_status()
-    w_data = w_resp.json()
-    weather = w_data["current"]
-    hourly = w_data["hourly"]
+    # ---- Weather (Open-Meteo) — graceful fallback if 503 ----
+    weather = {"temperature_2m": 0, "relative_humidity_2m": 0, "wind_speed_10m": 0, "surface_pressure": 0}
+    hourly_df = pd.DataFrame()
+    weather_ok = False
+    try:
+        w_url = ("https://api.open-meteo.com/v1/forecast"
+                 f"?latitude={LAT}&longitude={LON}"
+                 "&current=temperature_2m,relative_humidity_2m,wind_speed_10m,surface_pressure"
+                 "&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,surface_pressure"
+                 "&forecast_days=4")
+        w_resp = requests.get(w_url, timeout=15)
+        w_resp.raise_for_status()
+        w_data = w_resp.json()
+        weather = w_data["current"]
+        hourly = w_data["hourly"]
 
-    hourly_times = pd.to_datetime(hourly["time"]).tz_localize("UTC").tz_convert(KARACHI_TZ).as_unit("ns")
-    hourly_df = pd.DataFrame({
-        "datetime": hourly_times,
-        "temperature": hourly["temperature_2m"],
-        "humidity": hourly["relative_humidity_2m"],
-        "wind_speed": hourly["wind_speed_10m"],
-        "pressure": hourly["surface_pressure"],
-    })
+        hourly_times = pd.to_datetime(hourly["time"]).tz_localize("UTC").tz_convert(KARACHI_TZ).as_unit("ns")
+        hourly_df = pd.DataFrame({
+            "datetime": hourly_times,
+            "temperature": hourly["temperature_2m"],
+            "humidity": hourly["relative_humidity_2m"],
+            "wind_speed": hourly["wind_speed_10m"],
+            "pressure": hourly["surface_pressure"],
+        })
+        weather_ok = True
+    except Exception:
+        weather_ok = False
 
+    # ---- Merge pollutant forecast + weather ----
     combined_df = pd.DataFrame()
-    if not poll_forecast_df.empty:
+    if not poll_forecast_df.empty and not hourly_df.empty:
         combined_df = pd.merge_asof(
             poll_forecast_df.sort_values("datetime"),
             hourly_df.sort_values("datetime"),
             on="datetime", direction="nearest", tolerance=pd.Timedelta("30min"),
         ).dropna(subset=["temperature"])
 
-    return pollution, weather, combined_df
+    return pollution, weather, combined_df, weather_ok
 
 
 BREAKPOINTS = {
@@ -378,7 +383,7 @@ def build_forecast(feature_df, hist_lookback_df, current_aqi, current_row, featu
 
 
 try:
-    pollution, weather, combined_df = fetch_current_data()
+    pollution, weather, combined_df, weather_ok = fetch_current_data()
     hist_lookback_df = fetch_recent_actuals_from_feature_store(lookback_hours=72)
     hist_df = hist_lookback_df[hist_lookback_df["datetime"] >= now_karachi.normalize()] if not hist_lookback_df.empty else hist_lookback_df
     current_aqi, dominant = get_aqi(pollution)
@@ -402,6 +407,23 @@ try:
     """, unsafe_allow_html=True)
 
     # ===== HERO ROW =====
+    if weather_ok:
+        weather_html = f"""
+        <div class='weather-grid'>
+            <div class='w-card'><div class='w-label'>Temperature</div><div class='w-val'>{weather['temperature_2m']:.1f}°</div></div>
+            <div class='w-card'><div class='w-label'>Humidity</div><div class='w-val'>{weather['relative_humidity_2m']:.0f}%</div></div>
+            <div class='w-card'><div class='w-label'>Wind</div><div class='w-val'>{weather['wind_speed_10m']:.1f}<span style='font-size:12px;font-weight:500;color:var(--ink-3)'> km/h</span></div></div>
+            <div class='w-card'><div class='w-label'>Pressure</div><div class='w-val'>{weather['surface_pressure']:.0f}<span style='font-size:11px;font-weight:500;color:var(--ink-3)'> hPa</span></div></div>
+        </div>"""
+    else:
+        weather_html = f"""
+        <div class='weather-grid'>
+            <div class='w-card' style='grid-column:1/-1;align-items:center;text-align:center;'>
+                <div class='w-label'>Weather data</div>
+                <div style='font-size:13px;color:var(--ink-3);font-weight:500;margin-top:4px;'>Open-Meteo temporarily unavailable</div>
+            </div>
+        </div>"""
+
     st.markdown(f"""
     <div class='hero-row'>
         <div class='hero-card' style='--accent:{color}; --breathe-speed:{breathe_speed}'>
@@ -416,24 +438,7 @@ try:
             <div class='hero-cat' style='color:{color}'>{cat}</div>
             <div class='hero-sub'>{cat_desc} · {dominant.upper()}</div>
         </div>
-        <div class='weather-grid'>
-            <div class='w-card'>
-                <div class='w-label'>Temperature</div>
-                <div class='w-val'>{weather['temperature_2m']:.1f}°</div>
-            </div>
-            <div class='w-card'>
-                <div class='w-label'>Humidity</div>
-                <div class='w-val'>{weather['relative_humidity_2m']:.0f}%</div>
-            </div>
-            <div class='w-card'>
-                <div class='w-label'>Wind</div>
-                <div class='w-val'>{weather['wind_speed_10m']:.1f}<span style='font-size:12px;font-weight:500;color:var(--ink-3)'> km/h</span></div>
-            </div>
-            <div class='w-card'>
-                <div class='w-label'>Pressure</div>
-                <div class='w-val'>{weather['surface_pressure']:.0f}<span style='font-size:11px;font-weight:500;color:var(--ink-3)'> hPa</span></div>
-            </div>
-        </div>
+        {weather_html}
     </div>
     """, unsafe_allow_html=True)
 
@@ -477,7 +482,10 @@ try:
             if not ft_df.empty:
                 future_times, future_preds = build_forecast(ft_df, hist_lookback_df, current_aqi, pollution, feature_cols, model, scaler, hours=len(ft_df))
         if hist_df.empty and not future_times:
-            st.warning("No trend data available yet.")
+            if not weather_ok:
+                st.info("Trend unavailable — Open-Meteo weather service is temporarily down.")
+            else:
+                st.warning("No trend data available yet.")
         else:
             fig, ax = plt.subplots(figsize=(12, 3.8))
             fig.patch.set_facecolor("#FFFFFF")
@@ -519,7 +527,10 @@ try:
     </div>""", unsafe_allow_html=True)
     try:
         if combined_df.empty:
-            st.warning("Forecast unavailable.")
+            if not weather_ok:
+                st.info("Forecast unavailable — Open-Meteo weather service is temporarily down. Current AQI and pollutant levels are still live.")
+            else:
+                st.warning("Forecast unavailable.")
         else:
             future_df = combined_df[combined_df["datetime"] > now_karachi].sort_values("datetime")
             times, forecast_aqi = build_forecast(future_df, hist_lookback_df, current_aqi, pollution, feature_cols, model, scaler, hours=72)
