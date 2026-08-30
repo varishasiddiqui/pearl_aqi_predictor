@@ -424,7 +424,7 @@ try:
     st.html(f"""
     <div class='topbar'>
         <div class='topbar-left'>
-            <span class='brand-word'>Pearl</span>
+            <span class='brand-word'>Pearls AQI Predictor</span>
             <span class='brand-tag'>AQI Station · Karachi</span>
             <span class='status-line'><span class='status-dot {"status-on" if _has_ow else "status-off"}'></span>OpenWeather</span>
             <span class='status-line'><span class='status-dot {"status-on" if _has_hw else "status-off"}'></span>Hopsworks</span>
