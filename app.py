@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import joblib
 import requests
+import math
 from datetime import datetime, timedelta, timezone
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -18,63 +19,55 @@ now_karachi = pd.Timestamp.now(tz="UTC").tz_convert(KARACHI_TZ)
 st.set_page_config(page_title="Pearl · AQI Station Karachi", layout="wide", page_icon="🌆")
 
 st.markdown("""<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
     :root{
-        /* Surfaces */
-        --bg: #F1F4F9;
-        --bg-2: #E8EDF5;
-        --white: #FFFFFF;
-        --white-2: #FAFBFD;
-        --white-3: #EEF1F5;
-        --border: #E2E6ED;
-        --border-2: #D1D5DE;
+        /* Surfaces — dark control-room palette */
+        --void: #0A0D13;
+        --void-2: #0D1119;
+        --panel: #12161F;
+        --panel-2: #171C27;
+        --panel-3: #1D2330;
+        --line: #232A38;
+        --line-soft: #1A202C;
         /* Ink */
-        --ink: #0B1220;
-        --ink-2: #1E293B;
-        --ink-3: #475569;
-        --ink-4: #94A3B8;
-        --ink-5: #CBD5E1;
-        /* Status palette */
-        --good: #059669;
-        --good-soft: #D1FAE5;
-        --moderate: #D97706;
-        --moderate-soft: #FEF3C7;
-        --uhfs: #EA580C;
-        --uhfs-soft: #FFEDD5;
-        --unhealthy: #DC2626;
-        --unhealthy-soft: #FEE2E2;
-        --very: #7C3AED;
-        --very-soft: #EDE9FE;
-        --hazard: #B91C1C;
-        --hazard-soft: #FECACA;
-        /* Brand */
-        --brand: #0F172A;
-        --brand-2: #1E293B;
-        --accent-blue: #2563EB;
-        --accent-blue-soft: #DBEAFE;
-        /* Shadows — stronger, more layered */
-        --shadow-xs: 0 1px 2px rgba(15,23,42,0.04);
-        --shadow-sm: 0 1px 2px rgba(15,23,42,0.04), 0 2px 6px rgba(15,23,42,0.05);
-        --shadow-md: 0 4px 10px rgba(15,23,42,0.06), 0 2px 6px rgba(15,23,42,0.04);
-        --shadow-lg: 0 10px 24px rgba(15,23,42,0.08), 0 4px 8px rgba(15,23,42,0.04);
-        --shadow-glow: 0 0 0 1px rgba(15,23,42,0.04), 0 8px 28px rgba(15,23,42,0.10);
+        --ink: #EEF1F6;
+        --ink-2: #C7CEDB;
+        --ink-3: #8B93A6;
+        --ink-4: #5A6377;
+        --ink-faint: #454E60;
+        /* Signature accents */
+        --amber: #E8A33D;
+        --amber-soft: rgba(232,163,61,0.14);
+        --teal: #45D9C8;
+        --teal-soft: rgba(69,217,200,0.14);
+        /* Status palette (brightened for dark surfaces) */
+        --good: #34D399;
+        --moderate: #FBBF24;
+        --uhfs: #FB923C;
+        --unhealthy: #F87171;
+        --very: #A78BFA;
+        --hazard: #EF4444;
+        /* Shadows */
+        --shadow-sm: 0 1px 2px rgba(0,0,0,0.25);
+        --shadow-md: 0 6px 18px rgba(0,0,0,0.32);
+        --shadow-lg: 0 14px 34px rgba(0,0,0,0.4);
         /* Radius */
-        --radius: 14px;
-        --radius-lg: 18px;
-        --radius-xl: 22px;
+        --radius: 12px;
+        --radius-lg: 16px;
+        --radius-xl: 20px;
     }
 
     html, body, [class*="st-"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
     .stApp {
-        background: var(--bg) !important;
+        background: var(--void) !important;
         background-image:
-            radial-gradient(1200px 600px at 0% -5%, rgba(37,99,235,0.05), transparent 60%),
-            radial-gradient(900px 500px at 100% 0%, rgba(217,119,6,0.04), transparent 55%) !important;
+            radial-gradient(900px 480px at 8% -8%, rgba(232,163,61,0.07), transparent 60%),
+            radial-gradient(900px 520px at 100% 0%, rgba(69,217,200,0.06), transparent 55%) !important;
         background-attachment: fixed !important;
     }
-    .block-container { padding-top: 1.25rem; padding-bottom: 2.5rem; max-width: 1240px; }
-    h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; color: var(--ink) !important; letter-spacing: -0.025em; }
+    .block-container { padding-top: 0.9rem; padding-bottom: 2rem; max-width: 1180px; }
+    h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif !important; color: var(--ink) !important; letter-spacing: -0.02em; }
     p, span, label, div { color: var(--ink-2); }
 
     /* Hide Streamlit chrome */
@@ -90,371 +83,249 @@ st.markdown("""<style>
     }
 
     /* ===== TOP BAR ===== */
-    .top-bar {
+    .topbar {
         display: flex; align-items: center; justify-content: space-between;
-        padding: 6px 4px 14px; flex-wrap: wrap; gap: 8px;
+        padding: 8px 2px; flex-wrap: wrap; gap: 8px;
+        border-bottom: 1px solid var(--line-soft);
+        margin-bottom: 4px;
     }
-    .top-bar-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .top-bar-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-    .brand {
-        font-weight: 800; font-size: 18px; color: var(--ink);
-        letter-spacing: -0.035em; white-space: nowrap;
-        display: inline-flex; align-items: center; gap: 8px;
+    .topbar-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .brand-mark {
+        width: 20px; height: 20px; border-radius: 6px; flex-shrink: 0;
+        background: linear-gradient(135deg, var(--amber) 0%, #B8752A 100%);
+        box-shadow: 0 3px 8px rgba(232,163,61,0.35);
     }
-    .brand::before {
-        content: ''; width: 22px; height: 22px; border-radius: 7px;
-        background: linear-gradient(135deg, #2563EB 0%, #1E40AF 100%);
-        box-shadow: 0 4px 10px rgba(37,99,235,0.30), inset 0 1px 0 rgba(255,255,255,0.3);
+    .brand-word {
+        font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 15px;
+        color: var(--ink); letter-spacing: -0.01em; white-space: nowrap;
     }
-    .tag {
-        font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500;
-        color: var(--ink-3); background: var(--white);
-        border: 1px solid var(--border); padding: 4px 9px; border-radius: 7px;
-        white-space: nowrap;
-        box-shadow: var(--shadow-xs);
-        display: inline-flex; align-items: center;
-        transition: transform 0.15s, box-shadow 0.15s;
+    .brand-tag {
+        font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--ink-4);
+        letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;
+        padding-left: 8px; border-left: 1px solid var(--line); margin-left: 2px;
     }
-    .tag:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
-    .tag-dot {
-        display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-        margin-right: 6px; vertical-align: middle;
-        box-shadow: 0 0 0 2px rgba(255,255,255,0.6);
+    .chip {
+        font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 500;
+        color: var(--ink-3); background: var(--panel);
+        border: 1px solid var(--line); padding: 3px 8px; border-radius: 6px;
+        white-space: nowrap; display: inline-flex; align-items: center; gap: 5px;
     }
-    .tag-dot-on { background: var(--good); box-shadow: 0 0 0 2px rgba(5,150,105,0.15), 0 0 8px rgba(5,150,105,0.6); }
-    .tag-dot-off { background: var(--ink-4); }
+    .chip-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+    .chip-dot-on { background: var(--good); box-shadow: 0 0 6px rgba(52,211,153,0.7); }
+    .chip-dot-off { background: var(--ink-4); }
+
+    .topbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .clock {
-        font-family: 'JetBrains Mono', monospace; font-size: 11px;
-        color: var(--ink-3); text-align: right; white-space: nowrap;
-        line-height: 1.45;
+        font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+        color: var(--ink-3); text-align: right; white-space: nowrap; line-height: 1.3;
     }
     .clock .clock-date { color: var(--ink-2); font-weight: 600; }
-    .clock .clock-time { color: var(--ink-4); font-size: 10.5px; }
+    .clock .clock-time { color: var(--ink-4); font-size: 9.5px; }
 
-    /* ===== CREATOR CREDIT (top-right) ===== */
+    .credit-divider { width: 1px; height: 14px; background: var(--line); }
     .credit-tag {
         display: inline-flex; align-items: center; gap: 6px;
-        font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500;
+        font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 500;
         color: var(--ink-4); text-decoration: none; white-space: nowrap;
-        padding: 4px 10px 4px 8px; border-radius: 999px;
-        background: transparent; border: 1px solid transparent;
-        opacity: 0.62; transition: opacity 0.2s, background 0.2s, border-color 0.2s, transform 0.15s;
+        padding: 3px 8px 3px 6px; border-radius: 999px; border: 1px solid transparent;
+        opacity: 0.7; transition: opacity 0.2s, background 0.2s, border-color 0.2s;
     }
-    .credit-tag:hover {
-        opacity: 1; background: var(--white); border-color: var(--border);
-        box-shadow: var(--shadow-xs); transform: translateY(-1px);
-        color: var(--accent-blue);
-    }
-    .credit-tag .credit-icon {
-        width: 12px; height: 12px; flex-shrink: 0; opacity: 0.9;
-        color: #0A66C2; /* LinkedIn blue, only visible on hover-adjacent contexts */
-    }
-    .credit-divider {
-        width: 1px; height: 16px; background: var(--border-2); opacity: 0.7;
-    }
-    @media (max-width: 560px) {
-        .credit-tag span.credit-label { display: none; }
-        .credit-tag { padding: 4px; }
-    }
+    .credit-tag:hover { opacity: 1; background: var(--panel); border-color: var(--line); color: var(--teal); }
+    .credit-tag .credit-icon { width: 11px; height: 11px; flex-shrink: 0; color: #4FB4E8; }
+    @media (max-width: 560px) { .credit-tag span.credit-label { display: none; } }
 
-    /* ===== PAGE HEADLINE ===== */
-    .page-head { padding: 2px 4px 20px; }
-    .page-title {
-        font-weight: 900; font-size: 30px; color: var(--ink) !important;
-        letter-spacing: -0.035em; line-height: 1.1; margin: 0 0 6px;
-        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    /* ===== PAGE STRAPLINE ===== */
+    .strapline {
+        font-size: 12px; color: var(--ink-3); margin: 6px 2px 16px;
+        font-weight: 500; letter-spacing: -0.005em;
     }
-    .page-title .page-title-accent {
-        background: linear-gradient(120deg, var(--accent-blue) 0%, #7C3AED 100%);
-        -webkit-background-clip: text; background-clip: text; color: transparent;
-    }
-    .page-subtitle {
-        font-size: 13.5px; color: var(--ink-3) !important; font-weight: 500;
-        margin: 0; letter-spacing: -0.005em;
-    }
-    @media (max-width: 560px) {
-        .page-title { font-size: 22px; }
-        .page-subtitle { font-size: 12px; }
-    }
+    .strapline b { color: var(--ink-2); font-weight: 600; }
 
     /* ===== HERO ROW ===== */
-    .hero-row { display: flex; gap: 18px; margin: 4px 0 18px; align-items: stretch; flex-wrap: wrap; }
-    @media (max-width: 720px) {
-        .hero-row { flex-direction: column; }
-        .hero-card { min-width: 0; width: 100%; padding: 22px 20px 20px; }
+    .hero-row { display: flex; gap: 12px; margin: 0 0 14px; align-items: stretch; flex-wrap: wrap; }
+    .dial-card {
+        background: var(--panel); border: 1px solid var(--line);
+        border-radius: var(--radius-xl); padding: 16px 20px 14px;
+        box-shadow: var(--shadow-md); flex-shrink: 0; width: 240px;
+        display: flex; flex-direction: column; align-items: center;
+        position: relative;
     }
-    .hero-card {
-        background: var(--white);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-xl);
-        padding: 26px 30px 24px;
-        box-shadow: var(--shadow-md);
-        flex-shrink: 0;
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        min-width: 220px; position: relative; overflow: hidden;
-        transition: box-shadow 0.25s, transform 0.2s;
+    .dial-wrap { position: relative; width: 100%; max-width: 210px; }
+    .dial-readout {
+        position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%);
+        text-align: center; width: 100%;
     }
-    .hero-card::before {
-        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
-        background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #ffffff));
+    .dial-num {
+        font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 34px;
+        line-height: 1; letter-spacing: -0.02em; display: block;
     }
-    .hero-card::after {
-        content: ''; position: absolute; inset: 0;
-        background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 70%);
-        pointer-events: none;
+    .dial-cat {
+        font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.08em; margin-top: 3px;
+        padding: 2px 9px; border-radius: 999px; display: inline-block;
     }
-    .hero-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
-    .hero-label {
-        font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
-        color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.12em;
-        margin-bottom: 10px; font-weight: 600;
-        position: relative; z-index: 1;
+    .dial-sub {
+        font-size: 10px; color: var(--ink-4); margin-top: 6px; font-weight: 500;
+        font-family: 'JetBrains Mono', monospace; letter-spacing: 0.02em;
     }
-    .hero-cat {
-        font-family: 'JetBrains Mono', monospace; font-size: 11px;
-        color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em;
-        margin-top: 6px; font-weight: 700;
-        padding: 3px 10px; border-radius: 999px;
-        background: color-mix(in srgb, var(--accent) 12%, var(--white));
-        border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
-        position: relative; z-index: 1;
-    }
-    .hero-sub {
-        font-family: 'JetBrains Mono', monospace; font-size: 10px;
-        color: var(--ink-3); margin-top: 10px; font-weight: 500;
-        position: relative; z-index: 1;
-    }
+    .dial-pulse { animation: pulseglow var(--pulse-speed, 3s) ease-in-out infinite; }
+    @keyframes pulseglow { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+    @media (prefers-reduced-motion: reduce) { .dial-pulse { animation: none !important; } }
 
-    .weather-grid {
-        flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+    .instrument-strip {
+        flex: 1; min-width: 240px; background: var(--panel); border: 1px solid var(--line);
+        border-radius: var(--radius-xl); box-shadow: var(--shadow-sm);
+        display: flex; align-items: stretch; padding: 6px;
     }
-    @media (max-width: 700px) { .weather-grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 420px) { .weather-grid { grid-template-columns: 1fr; } }
-    .w-card {
-        background: var(--white);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-lg);
-        padding: 16px 18px 14px;
-        box-shadow: var(--shadow-sm);
-        display: flex; flex-direction: column; justify-content: space-between;
-        gap: 10px;
-        position: relative; overflow: hidden;
-        transition: box-shadow 0.25s, transform 0.2s, border-color 0.25s;
+    .instrument-item {
+        flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 6px;
+        padding: 14px 16px; position: relative;
     }
-    .w-card::before {
-        content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-        background: var(--w-accent, var(--ink-5));
-        opacity: 0.85;
+    .instrument-item + .instrument-item::before {
+        content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 1px;
+        background: var(--line);
     }
-    .w-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: var(--w-accent, var(--border-2)); }
-    .w-card-top { display: flex; align-items: center; justify-content: space-between; }
-    .w-icon {
-        width: 30px; height: 30px; border-radius: 9px;
-        display: flex; align-items: center; justify-content: center;
-        background: color-mix(in srgb, var(--w-accent, #94A3B8) 13%, var(--white));
-        color: var(--w-accent, var(--ink-4));
-        border: 1px solid color-mix(in srgb, var(--w-accent, #94A3B8) 18%, transparent);
+    .instrument-top { display: flex; align-items: center; gap: 7px; }
+    .instrument-icon {
+        width: 22px; height: 22px; border-radius: 7px; display: flex; align-items: center;
+        justify-content: center; background: color-mix(in srgb, var(--i-accent, #5A6377) 16%, var(--panel-2));
+        color: var(--i-accent, var(--ink-3)); flex-shrink: 0;
     }
-    .w-icon svg { width: 16px; height: 16px; display: block; }
-    .w-label {
-        font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
-        color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.1em;
-        font-weight: 600;
+    .instrument-icon svg { width: 12px; height: 12px; }
+    .instrument-label {
+        font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--ink-4);
+        text-transform: uppercase; letter-spacing: 0.09em; font-weight: 600;
     }
-    .w-val {
-        font-weight: 800; font-size: 24px; color: var(--ink);
-        line-height: 1.05; letter-spacing: -0.025em;
+    .instrument-val {
+        font-weight: 700; font-size: 20px; color: var(--ink); letter-spacing: -0.02em;
         display: flex; align-items: baseline; gap: 3px;
     }
-    .w-val .w-unit {
-        font-size: 11px; font-weight: 500; color: var(--ink-3);
-        letter-spacing: 0;
+    .instrument-val .instrument-unit { font-size: 10px; font-weight: 500; color: var(--ink-4); }
+    @media (max-width: 720px) {
+        .hero-row { flex-direction: column; }
+        .dial-card { width: 100%; }
+        .instrument-strip { flex-wrap: wrap; }
+        .instrument-item { min-width: 45%; }
+        .instrument-item + .instrument-item::before { display: none; }
+    }
+    @media (max-width: 420px) { .instrument-item { min-width: 100%; } .instrument-item + .instrument-item::before { display: none; } }
+
+    /* ===== SECTION HEAD (outside card, no border box) ===== */
+    .section-head {
+        display: flex; align-items: baseline; justify-content: space-between;
+        margin: 22px 4px 8px; flex-wrap: wrap; gap: 4px;
+    }
+    .section-head-left { display: flex; flex-direction: column; gap: 2px; }
+    .section-eyebrow {
+        font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--teal);
+        text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700;
+    }
+    .section-title {
+        font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 17px;
+        color: var(--ink) !important; margin: 0; letter-spacing: -0.01em;
+    }
+    .section-sub {
+        font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--ink-4);
+        text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500;
     }
 
-    /* ===== Halo / AQI ring ===== */
-    .halo-mini {
-        width: 130px; height: 130px; border-radius: 50%; position: relative;
-        display: flex; align-items: center; justify-content: center; margin-bottom: 10px;
-    }
-    .halo-mini-ring {
-        position: absolute; inset: 0; border-radius: 50%;
-        border: 2.5px solid var(--accent); opacity: 0.30;
-        animation: breathe var(--breathe-speed) ease-in-out infinite;
-    }
-    .halo-mini-ring.r2 { inset: 9px; animation-delay: calc(var(--breathe-speed) / -2); opacity: 0.18; }
-    .halo-mini-ring.r3 { inset: 18px; animation-delay: calc(var(--breathe-speed) / -4); opacity: 0.10; }
-    .halo-mini-core {
-        width: 104px; height: 104px; border-radius: 50%;
-        background: var(--white);
-        display: flex; align-items: center; justify-content: center; z-index: 2;
-        box-shadow: 0 0 0 6px var(--white), 0 8px 24px color-mix(in srgb, var(--accent) 25%, transparent);
-        border: 2px solid color-mix(in srgb, var(--accent) 80%, var(--white));
-    }
-    @keyframes breathe {
-        0%, 100% { transform: scale(1); opacity: 0.30; }
-        50% { transform: scale(1.12); opacity: 0.06; }
-    }
-    @media (prefers-reduced-motion: reduce) { .halo-mini-ring { animation: none !important; } }
-    @media (max-width: 420px) {
-        .halo-mini { width: 108px; height: 108px; }
-        .halo-mini-core { width: 86px; height: 86px; }
-        .halo-mini-core span { font-size: 34px !important; }
-    }
-
-    /* ===== PANELS ===== */
+    /* ===== PANEL (plain card, no internal head/border) ===== */
     .panel {
-        background: var(--white); border: 1px solid var(--border);
-        border-radius: var(--radius-xl); padding: 22px 26px 24px;
-        margin: 14px 0; box-shadow: var(--shadow-sm);
-        transition: box-shadow 0.25s;
+        background: var(--panel); border: 1px solid var(--line);
+        border-radius: var(--radius-xl); padding: 18px 20px 20px;
+        margin: 0 0 4px; box-shadow: var(--shadow-sm);
     }
-    .panel:hover { box-shadow: var(--shadow-md); }
-    .panel-head {
-        display: flex; align-items: center; justify-content: space-between;
-        margin-bottom: 16px; padding-bottom: 14px;
-        border-bottom: 1px solid var(--white-3);
-    }
-    .panel-head-left { display: flex; flex-direction: column; gap: 3px; }
-    .panel-title { font-weight: 800; font-size: 15px; color: var(--ink); margin: 0; letter-spacing: -0.015em; }
-    .panel-eyebrow {
-        font-family: 'JetBrains Mono', monospace; font-size: 9px;
-        color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.14em; font-weight: 600;
-    }
-    .panel-sub {
-        font-family: 'JetBrains Mono', monospace; font-size: 10px;
-        color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 500;
-    }
-    @media (max-width: 560px) {
-        .panel { padding: 16px 16px 18px; border-radius: var(--radius-lg); }
-        .panel-title { font-size: 14px; }
-        .panel-head { flex-wrap: wrap; gap: 6px; }
-    }
+    @media (max-width: 560px) { .panel { padding: 14px 14px 16px; } .section-title { font-size: 15px; } }
 
     /* ===== POLLUTANT GAUGES ===== */
-    .gauge-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; }
+    .gauge-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
     @media (max-width: 900px) { .gauge-grid { grid-template-columns: repeat(3, 1fr); } }
-    @media (max-width: 420px) { .gauge-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; } }
+    @media (max-width: 420px) { .gauge-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; } }
     .gauge-cell {
-        display: flex; flex-direction: column; align-items: center; gap: 9px;
-        padding: 10px 6px; border-radius: var(--radius);
-        transition: background 0.2s;
-    }
-    .gauge-cell:hover { background: var(--white-3); }
-    .gauge-ring-wrap { position: relative; width: 64px; height: 64px; }
-    .gauge-ring-wrap::after {
-        content: ''; position: absolute; inset: 2px; border-radius: 50%;
-        box-shadow: 0 4px 12px color-mix(in srgb, var(--g-color, #94A3B8) 25%, transparent);
-        opacity: 0.6;
+        display: flex; flex-direction: column; align-items: center; gap: 7px;
+        padding: 8px 4px; border-radius: var(--radius);
     }
     .gauge-name {
-        font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
-        color: var(--ink-3); letter-spacing: 0.06em; font-weight: 700;
+        font-family: 'JetBrains Mono', monospace; font-size: 10px;
+        color: var(--ink-3); letter-spacing: 0.05em; font-weight: 700;
     }
-    .gauge-val { font-weight: 800; font-size: 14px; letter-spacing: -0.02em; }
+    .gauge-val { font-weight: 700; font-size: 13px; letter-spacing: -0.01em; }
     .gauge-status {
-        font-family: 'JetBrains Mono', monospace; font-size: 9px;
-        text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em;
-        padding: 2px 8px; border-radius: 999px;
-        background: color-mix(in srgb, var(--g-color, #94A3B8) 12%, var(--white));
+        font-family: 'JetBrains Mono', monospace; font-size: 8.5px;
+        text-transform: uppercase; font-weight: 700; letter-spacing: 0.07em;
+        padding: 2px 7px; border-radius: 999px;
+        background: color-mix(in srgb, var(--g-color, #5A6377) 16%, var(--panel-2));
     }
 
     /* ===== DAY TILES ===== */
     .day-tile {
-        text-align: center; padding: 18px 12px 14px; border-radius: var(--radius-lg);
-        background: var(--white); border: 1px solid var(--border);
-        box-shadow: var(--shadow-sm);
-        transition: box-shadow 0.25s, transform 0.2s, border-color 0.25s;
+        text-align: center; padding: 14px 10px 12px; border-radius: var(--radius-lg);
+        background: var(--panel-2); border: 1px solid var(--line);
         position: relative; overflow: hidden;
     }
     .day-tile::before {
-        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-        background: var(--d-color, var(--ink-5));
-    }
-    .day-tile:hover {
-        box-shadow: var(--shadow-md); transform: translateY(-2px);
-        border-color: color-mix(in srgb, var(--d-color, var(--border-2)) 50%, var(--border));
+        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2.5px;
+        background: var(--d-color, var(--ink-4));
     }
     .day-tile .d-label {
         font-family: 'JetBrains Mono', monospace; color: var(--ink-3);
-        font-size: 10.5px; margin: 0; letter-spacing: 0.04em; font-weight: 600;
+        font-size: 10px; margin: 0; letter-spacing: 0.03em; font-weight: 600;
     }
-    .day-tile .d-val { font-weight: 900; font-size: 32px; margin: 8px 0 4px; letter-spacing: -0.025em; }
+    .day-tile .d-val { font-weight: 800; font-size: 26px; margin: 6px 0 3px; letter-spacing: -0.02em; }
     .day-tile .d-cat {
-        font-family: 'JetBrains Mono', monospace; font-size: 10px; margin: 0;
-        text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
-        padding: 2px 8px; border-radius: 999px;
-        background: color-mix(in srgb, var(--d-color, var(--ink-4)) 12%, var(--white));
+        font-family: 'JetBrains Mono', monospace; font-size: 9px; margin: 0;
+        text-transform: uppercase; letter-spacing: 0.03em; font-weight: 600;
+        padding: 2px 7px; border-radius: 999px;
+        background: color-mix(in srgb, var(--d-color, var(--ink-4)) 16%, var(--panel-3));
         display: inline-block;
     }
     .day-tile .d-range {
         font-family: 'JetBrains Mono', monospace; color: var(--ink-4);
-        font-size: 10px; margin-top: 10px; font-weight: 500;
-        padding-top: 8px; border-top: 1px dashed var(--white-3);
+        font-size: 9.5px; margin-top: 8px; font-weight: 500;
+        padding-top: 6px; border-top: 1px dashed var(--line);
     }
-    @media (max-width: 560px) {
-        .day-tile { padding: 14px 8px 12px; }
-        .day-tile .d-val { font-size: 24px; }
-    }
+    @media (max-width: 560px) { .day-tile .d-val { font-size: 22px; } }
 
     /* ===== GUIDANCE ===== */
     .guidance {
-        display: flex; gap: 14px; align-items: flex-start; padding: 16px 20px;
-        border-radius: var(--radius-lg); border: 1px solid color-mix(in srgb, var(--gl-color) 30%, var(--border));
-        background: linear-gradient(135deg,
-            color-mix(in srgb, var(--gl-color) 10%, var(--white)) 0%,
-            color-mix(in srgb, var(--gl-color) 4%, var(--white)) 100%);
-        box-shadow: var(--shadow-sm);
-        position: relative; overflow: hidden;
-    }
-    .guidance::before {
-        content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
-        background: var(--gl-color);
+        display: flex; gap: 12px; align-items: flex-start; padding: 13px 16px;
+        border-radius: var(--radius-lg); border: 1px solid color-mix(in srgb, var(--gl-color) 35%, var(--line));
+        background: color-mix(in srgb, var(--gl-color) 9%, var(--panel));
+        margin-top: 12px;
     }
     .guidance .g-dot {
-        width: 32px; height: 32px; border-radius: 10px;
-        background: var(--gl-color); margin-top: 1px; flex-shrink: 0;
-        display: flex; align-items: center; justify-content: center;
-        box-shadow: 0 4px 10px color-mix(in srgb, var(--gl-color) 35%, transparent);
-        position: relative;
+        width: 26px; height: 26px; border-radius: 8px; background: var(--gl-color);
+        margin-top: 1px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 3px 8px color-mix(in srgb, var(--gl-color) 45%, transparent);
     }
-    .guidance .g-dot::after {
-        content: ''; width: 8px; height: 8px; border-radius: 50%;
-        background: var(--white); box-shadow: 0 0 0 3px rgba(255,255,255,0.3);
-    }
-    .guidance .g-title { font-weight: 700; font-size: 13.5px; color: var(--ink); margin: 0 0 3px; letter-spacing: -0.01em; }
-    .guidance .g-body { font-size: 12px; color: var(--ink-3); margin: 0; line-height: 1.5; }
+    .guidance .g-dot::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--void); }
+    .guidance .g-title { font-weight: 700; font-size: 12.5px; color: var(--ink) !important; margin: 0 0 2px; }
+    .guidance .g-body { font-size: 11.5px; color: var(--ink-3) !important; margin: 0; line-height: 1.45; }
 
-    .stAlert { border-radius: var(--radius) !important; background: var(--white) !important; border: 1px solid var(--border) !important; }
+    .stAlert { border-radius: var(--radius) !important; background: var(--panel) !important; border: 1px solid var(--line) !important; }
+    .stAlert p { color: var(--ink-2) !important; }
     div[data-testid="stMetricValue"] { color: var(--ink) !important; }
-    hr { border-color: var(--border) !important; }
+    hr { border-color: var(--line) !important; }
 
-    /* ===== Layout safety: prevent left-clipping ===== */
-    .stApp [data-testid="stMain"],
-    .stApp [data-testid="stMainBlockContainer"] {
-        margin-left: 0 !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-        width: 100% !important;
-        max-width: 100% !important;
+    /* ===== Layout safety ===== */
+    .stApp [data-testid="stMain"], .stApp [data-testid="stMainBlockContainer"] {
+        margin-left: 0 !important; padding-left: 0 !important; padding-right: 0 !important;
+        width: 100% !important; max-width: 100% !important;
     }
     .block-container {
-        padding-top: 1.25rem !important; padding-bottom: 2.5rem !important;
-        padding-left: 1.25rem !important; padding-right: 1.25rem !important;
-        max-width: 1240px !important;
-        margin-left: auto !important; margin-right: auto !important;
+        padding-top: 0.9rem !important; padding-bottom: 2rem !important;
+        padding-left: 1.1rem !important; padding-right: 1.1rem !important;
+        max-width: 1180px !important; margin-left: auto !important; margin-right: auto !important;
     }
     @media (max-width: 480px) {
-        .block-container {
-            padding-left: 0.75rem !important; padding-right: 0.75rem !important;
-        }
+        .block-container { padding-left: 0.65rem !important; padding-right: 0.65rem !important; }
     }
 
     .footer-note {
         text-align: center; color: var(--ink-4);
-        font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
-        letter-spacing: 0.08em; margin-top: 16px; font-weight: 500;
-        padding: 14px 0 0;
-        border-top: 1px solid var(--border);
+        font-family: 'JetBrains Mono', monospace; font-size: 9px;
+        letter-spacing: 0.08em; margin-top: 14px; font-weight: 500;
+        padding: 12px 0 0; border-top: 1px solid var(--line-soft);
     }
 </style>""", unsafe_allow_html=True)
 
@@ -622,12 +493,12 @@ def get_aqi(components):
 
 
 def aqi_info(val):
-    if val <= 50: return "Good", "4.2s", "#059669", "Clear air"
-    elif val <= 100: return "Moderate", "3.6s", "#D97706", "Acceptable"
-    elif val <= 150: return "Sensitive Groups", "3.0s", "#EA580C", "Limit outdoors"
-    elif val <= 200: return "Unhealthy", "2.4s", "#DC2626", "Reduce activity"
-    elif val <= 300: return "Very Unhealthy", "1.8s", "#7C3AED", "Health alert"
-    else: return "Hazardous", "1.3s", "#B91C1C", "Stay indoors"
+    if val <= 50: return "Good", "4.2s", "#34D399", "Clear air"
+    elif val <= 100: return "Moderate", "3.6s", "#FBBF24", "Acceptable"
+    elif val <= 150: return "Sensitive Groups", "3.0s", "#FB923C", "Limit outdoors"
+    elif val <= 200: return "Unhealthy", "2.4s", "#F87171", "Reduce activity"
+    elif val <= 300: return "Very Unhealthy", "1.8s", "#A78BFA", "Health alert"
+    else: return "Hazardous", "1.3s", "#EF4444", "Stay indoors"
 
 
 def build_forecast(feature_df, hist_lookback_df, current_aqi, current_row, feature_cols, model, scaler, hours=72):
@@ -672,6 +543,53 @@ def build_forecast(feature_df, hist_lookback_df, current_aqi, current_row, featu
     return times, preds
 
 
+# ---------------------------------------------------------------------------
+# Presentation-only helpers: build the SVG instrument dial for the hero card.
+# Pure rendering (arc geometry for a semicircular gauge whose six segments
+# mirror the exact thresholds used by aqi_info() above) — nothing here
+# touches AQI math, the model, or any data logic.
+# ---------------------------------------------------------------------------
+_DIAL_SEGMENTS = [
+    (0, 50, "#34D399"),
+    (50, 100, "#FBBF24"),
+    (100, 150, "#FB923C"),
+    (150, 200, "#F87171"),
+    (200, 300, "#A78BFA"),
+    (300, 500, "#EF4444"),
+]
+
+def _dial_point(cx, cy, r, angle_deg):
+    a = math.radians(angle_deg)
+    return cx + r * math.cos(a), cy - r * math.sin(a)
+
+def _dial_arc(cx, cy, r, v_lo, v_hi, scale_max=500):
+    a_lo = 180 * (1 - v_lo / scale_max)
+    a_hi = 180 * (1 - v_hi / scale_max)
+    x1, y1 = _dial_point(cx, cy, r, a_lo)
+    x2, y2 = _dial_point(cx, cy, r, a_hi)
+    return f"M {x1:.2f} {y1:.2f} A {r} {r} 0 0 1 {x2:.2f} {y2:.2f}"
+
+def build_dial_svg(value, scale_max=500):
+    cx, cy, r = 120, 116, 96
+    needle_val = max(0, min(value, scale_max))
+    needle_angle = 180 * (1 - needle_val / scale_max)
+    nx, ny = _dial_point(cx, cy, r + 1, needle_angle)
+    tx, ty = _dial_point(cx, cy, r - 20, needle_angle)
+    segs = "".join(
+        f"<path d='{_dial_arc(cx, cy, r, lo, hi, scale_max)}' stroke='{c}' stroke-width='13' "
+        f"stroke-linecap='butt' fill='none' opacity='0.92'/>"
+        for lo, hi, c in _DIAL_SEGMENTS
+    )
+    return f"""<svg viewBox="0 0 240 138" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;overflow:visible;">
+        {segs}
+        <line x1="{tx:.2f}" y1="{ty:.2f}" x2="{nx:.2f}" y2="{ny:.2f}" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="{nx:.2f}" cy="{ny:.2f}" r="9" fill="var(--ink)" opacity="0.18"/>
+        <circle cx="{nx:.2f}" cy="{ny:.2f}" r="4.5" fill="var(--ink)"/>
+        <text x="14" y="132" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--ink-faint)" font-weight="600">0</text>
+        <text x="203" y="132" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--ink-faint)" font-weight="600">500</text>
+    </svg>"""
+
+
 try:
     pollution, weather, combined_df, weather_ok = fetch_current_data()
     hist_lookback_df = fetch_recent_actuals_from_feature_store(lookback_hours=72)
@@ -680,23 +598,18 @@ try:
     cat, breathe_speed, color, cat_desc = aqi_info(current_aqi)
 
     # ===== TOP BAR =====
-    # NOTE: switched from st.markdown(..., unsafe_allow_html=True) to st.html()
-    # because st.html() bypasses Streamlit's markdown parser entirely. With
-    # the old path, any 4-space-indented HTML line inside an interpolated
-    # f-string could be mis-rendered as a fenced code block. This is a pure
-    # UI-rendering swap; no data/prediction logic touched.
     st.html(f"""
-    <div class='top-bar'>
-        <div class='top-bar-left'>
-            <span class='brand'>Pearl AQI</span>
-            <span class='tag'><svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' style='margin-right:4px;color:var(--accent-blue)'><path d='M12 22s-8-7.58-8-13a8 8 0 1 1 16 0c0 5.42-8 13-8 13z'/><circle cx='12' cy='9' r='2.5'/></svg>Karachi 24.86°N</span>
-            <span class='tag'><span class='tag-dot {"tag-dot-on" if _has_ow else "tag-dot-off"}'></span>OpenWeather</span>
-            <span class='tag'><span class='tag-dot {"tag-dot-on" if _has_hw else "tag-dot-off"}'></span>Hopsworks</span>
-            <span class='tag'>Model: {model_source}</span>
-            <span class='tag'>{len(feature_cols)} features</span>
+    <div class='topbar'>
+        <div class='topbar-left'>
+            <span class='brand-mark'></span>
+            <span class='brand-word'>Pearl</span>
+            <span class='brand-tag'>AQI Station · Karachi</span>
+            <span class='chip'><span class='chip-dot {"chip-dot-on" if _has_ow else "chip-dot-off"}'></span>OpenWeather</span>
+            <span class='chip'><span class='chip-dot {"chip-dot-on" if _has_hw else "chip-dot-off"}'></span>Hopsworks</span>
+            <span class='chip'>{model_source}</span>
         </div>
-        <div class='top-bar-right'>
-            <span class='clock'><span class='clock-date'>{now_karachi.strftime('%a %d %b')}</span><br><span class='clock-time'>{now_karachi.strftime('%I:%M %p')} PKT</span></span>
+        <div class='topbar-right'>
+            <span class='clock'><span class='clock-date'>{now_karachi.strftime('%a %d %b')}</span> · <span class='clock-time'>{now_karachi.strftime('%I:%M %p')} PKT</span></span>
             <span class='credit-divider'></span>
             <a class='credit-tag' href='https://www.linkedin.com/in/warisha-siddiqui/' target='_blank' rel='noopener noreferrer' title='Warisha Arshad on LinkedIn'>
                 <svg class='credit-icon' viewBox='0 0 24 24' fill='currentColor' xmlns='http://www.w3.org/2000/svg'><path d='M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.44-2.14 2.94v5.67H9.34V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.38-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.07 2.07 0 1 1 0-4.13 2.07 2.07 0 0 1 0 4.13zM7.13 20.45H3.56V9h3.57v11.45zM22.22 0H1.77C.8 0 0 .78 0 1.75v20.5C0 23.22.8 24 1.77 24h20.45c.98 0 1.78-.78 1.78-1.75V1.75C24 .78 23.2 0 22.22 0z'/></svg>
@@ -704,109 +617,77 @@ try:
             </a>
         </div>
     </div>
+    <p class='strapline'>Live pollutant readings, hourly trend and a <b>72-hour AI forecast</b> for {LAT:.2f}°N, {LON:.2f}°E.</p>
     """)
 
-    # ===== PAGE HEADLINE =====
-    # Clear, page-level heading + one-line subtitle so the dashboard's purpose
-    # is legible at a glance, above the live status chips in the top bar.
-    st.html(f"""
-    <div class='page-head'>
-        <h1 class='page-title'>Karachi <span class='page-title-accent'>Air Quality</span></h1>
-        <p class='page-subtitle'>Live pollutant readings, hourly trend and a 72-hour AI forecast for {LAT:.2f}°N, {LON:.2f}°E</p>
-    </div>
-    """)
-
-    # ===== HERO ROW =====
-    # Build weather_html as a SINGLE-LINE string. Previously this was a
-    # triple-quoted f-string with a leading newline and 8-space indentation
-    # (because the source code itself is indented inside the if-branch).
-    # When that indented string was interpolated into the outer hero-row
-    # st.markdown f-string, Streamlit's markdown parser saw the 8-space-
-    # indented <div class='weather-grid'> line preceded by a blank line and
-    # interpreted it as a fenced code block — so the user saw the literal
-    # <div class='weather-grid'>...</div> source text on a dark background
-    # instead of the four weather cards. Building it as a single concatenated
-    # line removes any possibility of that misinterpretation.
+    # ===== HERO: instrument dial + weather strip =====
     if weather_ok:
-        # Inline SVG icons (Feather/Lucide style, 18x18). Each <svg> uses
-        # stroke="currentColor" fill="none" so the icon inherits the card's
-        # accent color via the --w-accent CSS variable set on the parent.
-        icon_temp = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 4v10.5a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0z'/></svg>")
-        icon_hum   = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2.69l5.66 5.66a8 8 0 1 1-11.32 0z'/></svg>")
-        icon_wind  = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16h2m-6.41-7.41A2 2 0 1 1 14 12H2m16.41 4.59A2 2 0 1 1 20 20H2'/></svg>")
-        icon_press = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></svg>")
-        weather_html = (
-            f"<div class='weather-grid'>"
-            f"<div class='w-card' style='--w-accent:#EF4444'>"
-            f"<div class='w-card-top'><span class='w-label'>Temperature</span><span class='w-icon'>{icon_temp}</span></div>"
-            f"<div class='w-val'>{weather['temperature_2m']:.1f}°<span class='w-unit'>C</span></div>"
+        icon_temp = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 4v10.5a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0z'/></svg>"
+        icon_hum   = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2.69l5.66 5.66a8 8 0 1 1-11.32 0z'/></svg>"
+        icon_wind  = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16h2m-6.41-7.41A2 2 0 1 1 14 12H2m16.41 4.59A2 2 0 1 1 20 20H2'/></svg>"
+        icon_press = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></svg>"
+        instrument_html = (
+            f"<div class='instrument-strip'>"
+            f"<div class='instrument-item' style='--i-accent:#F87171'>"
+            f"<div class='instrument-top'><span class='instrument-icon'>{icon_temp}</span><span class='instrument-label'>Temp</span></div>"
+            f"<div class='instrument-val'>{weather['temperature_2m']:.1f}°<span class='instrument-unit'>C</span></div>"
             f"</div>"
-            f"<div class='w-card' style='--w-accent:#0EA5E9'>"
-            f"<div class='w-card-top'><span class='w-label'>Humidity</span><span class='w-icon'>{icon_hum}</span></div>"
-            f"<div class='w-val'>{weather['relative_humidity_2m']:.0f}<span class='w-unit'>%</span></div>"
+            f"<div class='instrument-item' style='--i-accent:#4FB4E8'>"
+            f"<div class='instrument-top'><span class='instrument-icon'>{icon_hum}</span><span class='instrument-label'>Humidity</span></div>"
+            f"<div class='instrument-val'>{weather['relative_humidity_2m']:.0f}<span class='instrument-unit'>%</span></div>"
             f"</div>"
-            f"<div class='w-card' style='--w-accent:#14B8A6'>"
-            f"<div class='w-card-top'><span class='w-label'>Wind</span><span class='w-icon'>{icon_wind}</span></div>"
-            f"<div class='w-val'>{weather['wind_speed_10m']:.1f}<span class='w-unit'>km/h</span></div>"
+            f"<div class='instrument-item' style='--i-accent:#45D9C8'>"
+            f"<div class='instrument-top'><span class='instrument-icon'>{icon_wind}</span><span class='instrument-label'>Wind</span></div>"
+            f"<div class='instrument-val'>{weather['wind_speed_10m']:.1f}<span class='instrument-unit'>km/h</span></div>"
             f"</div>"
-            f"<div class='w-card' style='--w-accent:#8B5CF6'>"
-            f"<div class='w-card-top'><span class='w-label'>Pressure</span><span class='w-icon'>{icon_press}</span></div>"
-            f"<div class='w-val'>{weather['surface_pressure']:.0f}<span class='w-unit'>hPa</span></div>"
+            f"<div class='instrument-item' style='--i-accent:#A78BFA'>"
+            f"<div class='instrument-top'><span class='instrument-icon'>{icon_press}</span><span class='instrument-label'>Pressure</span></div>"
+            f"<div class='instrument-val'>{weather['surface_pressure']:.0f}<span class='instrument-unit'>hPa</span></div>"
             f"</div>"
             f"</div>"
         )
     else:
-        weather_html = (
-            f"<div class='weather-grid'>"
-            f"<div class='w-card' style='grid-column:1/-1;align-items:center;text-align:center;justify-content:center;'>"
-            f"<div class='w-label'>Weather data</div>"
-            f"<div style='font-size:13px;color:var(--ink-3);font-weight:500;margin-top:4px;'>Open-Meteo temporarily unavailable</div>"
-            f"</div>"
-            f"</div>"
+        instrument_html = (
+            "<div class='instrument-strip' style='align-items:center;justify-content:center;padding:20px;'>"
+            "<div style='text-align:center;'><div class='instrument-label'>Weather data</div>"
+            "<div style='font-size:12px;color:var(--ink-3);font-weight:500;margin-top:4px;'>Open-Meteo temporarily unavailable</div></div>"
+            "</div>"
         )
 
-    # Use st.html() instead of st.markdown(unsafe_allow_html=True) so the
-    # interpolated HTML is never run through the markdown parser at all.
-    # This is a UI/UX-only change: same HTML, same data, same layout — just a
-    # different rendering entry point that is robust against any future
-    # Streamlit markdown-parser quirks.
     st.html(f"""
     <div class='hero-row'>
-        <div class='hero-card' style='--accent:{color}; --breathe-speed:{breathe_speed}'>
-            <div class='halo-mini'>
-                <div class='halo-mini-ring'></div>
-                <div class='halo-mini-ring r2'></div>
-                <div class='halo-mini-ring r3'></div>
-                <div class='halo-mini-core'>
-                    <span style='font-weight:900;font-size:42px;color:{color};line-height:1;letter-spacing:-0.04em'>{current_aqi:.0f}</span>
+        <div class='dial-card'>
+            <div class='dial-wrap'>
+                {build_dial_svg(current_aqi)}
+                <div class='dial-readout'>
+                    <span class='dial-num dial-pulse' style='color:{color}; --pulse-speed:{breathe_speed}'>{current_aqi:.0f}</span>
+                    <span class='dial-cat' style='color:{color}; background:color-mix(in srgb, {color} 16%, var(--panel-2))'>{cat}</span>
+                    <div class='dial-sub'>{cat_desc} · {dominant.upper()}</div>
                 </div>
             </div>
-            <div class='hero-label'>Air Quality Index</div>
-            <div class='hero-cat' style='color:{color}'>{cat}</div>
-            <div class='hero-sub'>{cat_desc} · {dominant.upper()}</div>
         </div>
-        {weather_html}
+        {instrument_html}
     </div>
     """)
 
     # ===== POLLUTANT GAUGES =====
-    st.html("""<div class='panel'><div class='panel-head'>
-        <div class='panel-head-left'><span class='panel-eyebrow'>Live readings</span><p class='panel-title'>Pollutant Levels</p></div>
-    </div>""")
+    st.html("""
+    <div class='section-head'>
+        <div class='section-head-left'><span class='section-eyebrow'>Live readings</span><h3 class='section-title'>Pollutant Levels</h3></div>
+    </div>
+    <div class='panel'>""")
     show_p = {k: v for k, v in pollution.items() if k not in ["no", "nh3"]}
     threshold = {"pm2_5": 75, "pm10": 150, "no2": 100, "so2": 75, "o3": 70, "co": 10000}
     gauges = "<div class='gauge-grid'>"
     for p, val in show_p.items():
         pct = min(val / threshold.get(p, 100) * 100, 100)
         status = "Low" if pct < 40 else "Moderate" if pct < 70 else "High"
-        gcolor = "#059669" if pct < 40 else "#D97706" if pct < 70 else "#DC2626"
+        gcolor = "#34D399" if pct < 40 else "#FBBF24" if pct < 70 else "#F87171"
         gauges += f"""
         <div class='gauge-cell' style='--g-color:{gcolor}'>
-            <div class='gauge-ring-wrap'>
-                <div style='width:64px;height:64px;border-radius:50%;background:conic-gradient({gcolor} {pct:.0f}%, var(--white-3) {pct:.0f}% 100%);display:flex;align-items:center;justify-content:center;position:relative;z-index:1;'>
-                    <div style='width:48px;height:48px;border-radius:50%;background:var(--white);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--white-3);'>
-                        <span class='gauge-val' style='color:{gcolor}'>{val:.0f}</span>
-                    </div>
+            <div style='width:58px;height:58px;border-radius:50%;background:conic-gradient({gcolor} {pct:.0f}%, var(--panel-3) {pct:.0f}% 100%);display:flex;align-items:center;justify-content:center;'>
+                <div style='width:44px;height:44px;border-radius:50%;background:var(--panel);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--line);'>
+                    <span class='gauge-val' style='color:{gcolor}'>{val:.0f}</span>
                 </div>
             </div>
             <span class='gauge-name'>{p.upper()}</span>
@@ -817,10 +698,12 @@ try:
     st.html("</div>")
 
     # ===== TODAY'S TREND =====
-    st.html("""<div class='panel'><div class='panel-head'>
-        <div class='panel-head-left'><span class='panel-eyebrow'>Today · {now_karachi.strftime('%d %b')}</span><p class='panel-title'>AQI Trend</p></div>
-        <p class='panel-sub'>Measured · Predicted</p>
-    </div>""")
+    st.html(f"""
+    <div class='section-head'>
+        <div class='section-head-left'><span class='section-eyebrow'>Today · {now_karachi.strftime('%d %b')}</span><h3 class='section-title'>AQI Trend</h3></div>
+        <span class='section-sub'>Measured · Predicted</span>
+    </div>
+    <div class='panel'>""")
     try:
         if not hist_df.empty:
             hist_df = hist_df.copy().sort_values("datetime")
@@ -836,31 +719,31 @@ try:
             else:
                 st.warning("No trend data available yet.")
         else:
-            fig, ax = plt.subplots(figsize=(12, 3.8))
-            fig.patch.set_facecolor("#FFFFFF")
-            ax.set_facecolor("#FAFBFC")
+            fig, ax = plt.subplots(figsize=(12, 3.4))
+            fig.patch.set_facecolor("#12161F")
+            ax.set_facecolor("#10141C")
             ds = now_karachi.replace(hour=0, minute=0, second=0, microsecond=0)
             de = now_karachi.replace(hour=23, minute=59, second=0, microsecond=0)
-            ax.fill_between([ds, de], 0, 50, alpha=0.06, color="#059669")
-            ax.fill_between([ds, de], 50, 100, alpha=0.06, color="#D97706")
-            ax.fill_between([ds, de], 100, 150, alpha=0.06, color="#EA580C")
-            ax.fill_between([ds, de], 150, 200, alpha=0.06, color="#DC2626")
+            ax.fill_between([ds, de], 0, 50, alpha=0.10, color="#34D399")
+            ax.fill_between([ds, de], 50, 100, alpha=0.10, color="#FBBF24")
+            ax.fill_between([ds, de], 100, 150, alpha=0.10, color="#FB923C")
+            ax.fill_between([ds, de], 150, 200, alpha=0.10, color="#F87171")
             all_vals = []
             if not hist_df.empty:
                 ax.plot(hist_df["datetime"], hist_df["aqi"], color=color, linewidth=2, label="Measured", zorder=5)
                 all_vals += hist_df["aqi"].tolist()
             if future_times:
-                ax.plot(future_times, future_preds, color=color, linewidth=1.8, linestyle="--", alpha=0.65, label="Predicted", zorder=5)
+                ax.plot(future_times, future_preds, color=color, linewidth=1.8, linestyle="--", alpha=0.7, label="Predicted", zorder=5)
                 all_vals += future_preds
-            ax.scatter([now_karachi], [current_aqi], color=color, s=80, zorder=6, edgecolors="#FFF", linewidths=2, label="Now")
-            ax.axhline(current_aqi, color="#CBD5E1", linestyle="--", alpha=0.4, linewidth=0.8)
-            ax.set_ylabel("AQI", color="#64748B", fontsize=10, fontweight=500)
+            ax.scatter([now_karachi], [current_aqi], color=color, s=70, zorder=6, edgecolors="#12161F", linewidths=2, label="Now")
+            ax.axhline(current_aqi, color="#3A4152", linestyle="--", alpha=0.5, linewidth=0.8)
+            ax.set_ylabel("AQI", color="#8B93A6", fontsize=10, fontweight=500)
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%I %p", tz=KARACHI_TZ))
-            ax.grid(True, alpha=0.12, color="#E2E8F0", linestyle="-")
-            ax.tick_params(colors="#64748B", labelsize=8)
+            ax.grid(True, alpha=0.10, color="#8B93A6", linestyle="-")
+            ax.tick_params(colors="#8B93A6", labelsize=8)
             for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
-            for s in ax.spines.values(): s.set_color("#E2E8F0")
-            ax.legend(facecolor="#FFF", edgecolor="#E2E8F0", labelcolor="#334155", fontsize=8, loc="upper right", framealpha=0.95)
+            for s in ax.spines.values(): s.set_color("#232A38")
+            ax.legend(facecolor="#171C27", edgecolor="#232A38", labelcolor="#C7CEDB", fontsize=8, loc="upper right", framealpha=0.95)
             if all_vals: ax.set_ylim(max(0, min(all_vals) - 10), max(all_vals) + 10)
             plt.tight_layout()
             st.pyplot(fig)
@@ -870,10 +753,12 @@ try:
     st.html("</div>")
 
     # ===== 3-DAY FORECAST =====
-    st.html("""<div class='panel'><div class='panel-head'>
-        <div class='panel-head-left'><span class='panel-eyebrow'>Next 72 hours</span><p class='panel-title'>3-Day Forecast</p></div>
-        <p class='panel-sub'>Hourly model prediction</p>
-    </div>""")
+    st.html("""
+    <div class='section-head'>
+        <div class='section-head-left'><span class='section-eyebrow'>Next 72 hours</span><h3 class='section-title'>3-Day Forecast</h3></div>
+        <span class='section-sub'>Hourly model prediction</span>
+    </div>
+    <div class='panel'>""")
     try:
         if combined_df.empty:
             if not weather_ok:
@@ -903,28 +788,28 @@ try:
                             <p class='d-cat' style='color:{dcol}'>{dc}</p>
                             <p class='d-range'>↓ {dmi:.0f} — {dmx:.0f} ↑</p>
                         </div>""")
-                fig, ax = plt.subplots(figsize=(12, 2.4))
-                fig.patch.set_facecolor("#FFFFFF")
-                ax.set_facecolor("#FAFBFC")
+                fig, ax = plt.subplots(figsize=(12, 2.2))
+                fig.patch.set_facecolor("#12161F")
+                ax.set_facecolor("#10141C")
                 ax.plot(fdf["datetime"], fdf["aqi"], color=color, linewidth=1.5)
-                ax.fill_between(fdf["datetime"], fdf["aqi"] - 3, fdf["aqi"] + 3, alpha=0.08, color=color)
-                ax.axhline(100, color="#D97706", linestyle="--", alpha=0.4, linewidth=0.7)
-                ax.axhline(150, color="#EA580C", linestyle="--", alpha=0.4, linewidth=0.7)
-                ax.set_ylabel("AQI", color="#64748B", fontsize=9, fontweight=500)
+                ax.fill_between(fdf["datetime"], fdf["aqi"] - 3, fdf["aqi"] + 3, alpha=0.12, color=color)
+                ax.axhline(100, color="#FBBF24", linestyle="--", alpha=0.5, linewidth=0.7)
+                ax.axhline(150, color="#FB923C", linestyle="--", alpha=0.5, linewidth=0.7)
+                ax.set_ylabel("AQI", color="#8B93A6", fontsize=9, fontweight=500)
                 ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d", tz=KARACHI_TZ))
-                ax.grid(True, alpha=0.12, color="#E2E8F0", linestyle="-")
-                ax.tick_params(colors="#64748B", labelsize=7)
+                ax.grid(True, alpha=0.10, color="#8B93A6", linestyle="-")
+                ax.tick_params(colors="#8B93A6", labelsize=7)
                 for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
-                for s in ax.spines.values(): s.set_color("#E2E8F0")
+                for s in ax.spines.values(): s.set_color("#232A38")
                 plt.tight_layout()
                 st.pyplot(fig)
                 plt.close(fig)
                 if any(a > 150 for a in forecast_aqi):
-                    gc, gt, gb = "#DC2626", "Hazardous AQI expected", "Avoid outdoor activity."
+                    gc, gt, gb = "#F87171", "Hazardous AQI expected", "Avoid outdoor activity."
                 elif any(a > 100 for a in forecast_aqi):
-                    gc, gt, gb = "#D97706", "Elevated AQI expected", "Sensitive groups should limit outdoor time."
+                    gc, gt, gb = "#FBBF24", "Elevated AQI expected", "Sensitive groups should limit outdoor time."
                 else:
-                    gc, gt, gb = "#059669", "Within safe range", "No elevated AQI expected."
+                    gc, gt, gb = "#34D399", "Within safe range", "No elevated AQI expected."
                 st.html(f"""<div class='guidance' style='--gl-color:{gc}'><span class='g-dot'></span><div><p class='g-title'>{gt}</p><p class='g-body'>{gb}</p></div></div>""")
     except Exception as e:
         st.error(f"Forecast: {e}")
@@ -932,15 +817,19 @@ try:
 
     # ===== GUIDANCE =====
     tips = {
-        "Good": ("Excellent air quality — perfect for outdoor activity.", "#059669"),
-        "Moderate": ("Acceptable. Sensitive people should limit prolonged exertion.", "#D97706"),
-        "Sensitive Groups": ("Sensitive groups should reduce outdoor activity.", "#EA580C"),
-        "Unhealthy": ("Reduce outdoor physical activity for everyone.", "#DC2626"),
-        "Very Unhealthy": ("Avoid outdoors — use air purifiers indoors.", "#7C3AED"),
-        "Hazardous": ("Emergency. Stay indoors, seek medical help if needed.", "#B91C1C"),
+        "Good": ("Excellent air quality — perfect for outdoor activity.", "#34D399"),
+        "Moderate": ("Acceptable. Sensitive people should limit prolonged exertion.", "#FBBF24"),
+        "Sensitive Groups": ("Sensitive groups should reduce outdoor activity.", "#FB923C"),
+        "Unhealthy": ("Reduce outdoor physical activity for everyone.", "#F87171"),
+        "Very Unhealthy": ("Avoid outdoors — use air purifiers indoors.", "#A78BFA"),
+        "Hazardous": ("Emergency. Stay indoors, seek medical help if needed.", "#EF4444"),
     }
     tb, tc = tips.get(cat, ("", color))
-    st.html(f"""<div class='guidance' style='--gl-color:{tc}'><span class='g-dot'></span><div><p class='g-title'>Right now: {cat}</p><p class='g-body'>{tb}</p></div></div>""")
+    st.html(f"""
+    <div class='section-head'><div class='section-head-left'><span class='section-eyebrow'>Right now</span><h3 class='section-title'>Health Guidance</h3></div></div>
+    <div class='panel' style='padding:14px 16px;'>
+        <div class='guidance' style='--gl-color:{tc}; margin-top:0;'><span class='g-dot'></span><div><p class='g-title'>{cat}</p><p class='g-body'>{tb}</p></div></div>
+    </div>""")
 
 except Exception as e:
     st.error(f"Error: {e}")
