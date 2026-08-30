@@ -117,9 +117,11 @@ st.markdown("""<style>
     .stat-val { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 20px; color: var(--ink); }
     .stat-val .stat-unit { font-size: 11px; font-weight: 500; color: var(--ink-4); margin-left: 2px; }
     .weather-note { font-size: 12.5px; color: var(--ink-4); }
+    .hero-stats { grid-template-columns: repeat(2, auto); }
     @media (max-width: 640px) {
-        .hero-card { padding: 20px; flex-direction: column; align-items: flex-start; }
-        .hero-num { font-size: 52px; }
+        .hero-card { padding: 18px; flex-direction: column; align-items: flex-start; gap: 18px; }
+        .hero-num { font-size: 48px; }
+        .hero-stats { gap: 14px 24px; }
     }
 
     /* ===== SECTION HEAD ===== */
@@ -127,19 +129,22 @@ st.markdown("""<style>
     .section-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px; color: var(--ink) !important; margin: 0; }
     .section-note { font-size: 11.5px; color: var(--ink-4); }
 
-    /* ===== POLLUTANT LIST ===== */
-    .poll-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }
-    .poll-row:last-child { border-bottom: none; }
-    .poll-name { font-size: 13px; font-weight: 600; color: var(--ink); width: 58px; flex-shrink: 0; }
-    .poll-bar-track { flex: 1; height: 7px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
-    .poll-bar-fill { height: 100%; border-radius: 4px; }
-    .poll-val { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--ink-2); width: 100px; text-align: right; flex-shrink: 0; }
-    .poll-status { font-size: 11px; font-weight: 700; width: 70px; text-align: right; flex-shrink: 0; }
-    @media (max-width: 560px) {
-        .poll-name { width: 44px; }
-        .poll-val { width: 76px; font-size: 11.5px; }
-        .poll-status { display: none; }
+    /* ===== POLLUTANT GAUGES — compact ring grid, everything visible at a glance ===== */
+    .gauge-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    @media (max-width: 560px) { .gauge-grid { grid-template-columns: repeat(3, 1fr); gap: 10px 6px; } }
+    .gauge-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .gauge-ring {
+        width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
     }
+    .gauge-ring-inner {
+        width: 44px; height: 44px; border-radius: 50%; background: var(--panel);
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: inset 0 0 0 1px var(--line);
+    }
+    .gauge-val { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; }
+    .gauge-name { font-size: 10.5px; color: var(--ink-3); font-weight: 600; letter-spacing: 0.02em; }
+    .gauge-status { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
 
     /* ===== DAY ROW ===== */
     .day-row { display: flex; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
@@ -161,11 +166,11 @@ st.markdown("""<style>
     .stAlert p { color: var(--ink-2) !important; }
     hr { border-color: var(--line) !important; }
 
-    .stApp [data-testid="stMain"], .stApp [data-testid="stMainBlockContainer"] {
-        margin-left: 0 !important; padding-left: 0 !important; padding-right: 0 !important;
-        width: 100% !important; max-width: 100% !important;
+    .stApp [data-testid="stMain"] { margin-left: 0 !important; }
+    .stApp [data-testid="stMainBlockContainer"], .block-container {
+        max-width: 720px !important; margin-left: auto !important; margin-right: auto !important;
+        padding-left: 1.1rem !important; padding-right: 1.1rem !important;
     }
-    .block-container { padding-left: 1.1rem !important; padding-right: 1.1rem !important; margin-left: auto !important; margin-right: auto !important; }
     @media (max-width: 480px) { .block-container { padding-left: 0.8rem !important; padding-right: 0.8rem !important; } }
 
     .footer-note { text-align: center; color: var(--ink-4); font-size: 11px; margin-top: 26px; padding: 16px 0 0; border-top: 1px solid var(--line); }
@@ -466,19 +471,21 @@ try:
     show_p = {k: v for k, v in pollution.items() if k not in ["no", "nh3"]}
     threshold = {"pm2_5": 75, "pm10": 150, "no2": 100, "so2": 75, "o3": 70, "co": 10000}
     names = {"pm2_5": "PM2.5", "pm10": "PM10", "no2": "NO₂", "so2": "SO₂", "o3": "O₃", "co": "CO"}
-    rows = ""
+    cells = "<div class='gauge-grid'>"
     for p, val in show_p.items():
         pct = min(val / threshold.get(p, 100) * 100, 100)
         status = "Low" if pct < 40 else "Moderate" if pct < 70 else "High"
         gcolor = "#34D399" if pct < 40 else "#FBBF24" if pct < 70 else "#F87171"
-        rows += f"""
-        <div class='poll-row'>
-            <span class='poll-name'>{names.get(p, p.upper())}</span>
-            <span class='poll-bar-track'><span class='poll-bar-fill' style='width:{pct:.0f}%; background:{gcolor}'></span></span>
-            <span class='poll-val'>{val:.1f} µg/m³</span>
-            <span class='poll-status' style='color:{gcolor}'>{status}</span>
+        cells += f"""
+        <div class='gauge-cell'>
+            <div class='gauge-ring' style='background:conic-gradient({gcolor} {pct:.0f}%, var(--panel-2) {pct:.0f}% 100%)'>
+                <div class='gauge-ring-inner'><span class='gauge-val' style='color:{gcolor}'>{val:.0f}</span></div>
+            </div>
+            <span class='gauge-name'>{names.get(p, p.upper())}</span>
+            <span class='gauge-status' style='color:{gcolor}'>{status}</span>
         </div>"""
-    st.html(rows)
+    cells += "</div>"
+    st.html(cells)
 
     # ===== TODAY'S TREND =====
     st.html(f"""
