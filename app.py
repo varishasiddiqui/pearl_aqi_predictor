@@ -22,166 +22,153 @@ st.markdown("""<style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
     :root{
-        /* Surfaces — one flat dark tone, no card layers */
-        --void: #0B0D11;
-        --ink: #F2F4F7;
-        --ink-2: #ABB2C0;
-        --ink-3: #767E8F;
-        --ink-4: #4B5261;
-        --line: #20242D;
-        /* Signature accent */
-        --amber: #E8A33D;
-        --teal: #45D9C8;
-        /* Status palette (semantic — used only where it means something) */
+        --void: #0A0C10;
+        --panel: #12151C;
+        --panel-2: #171B24;
+        --ink: #F4F6F9;
+        --ink-2: #B4BBC9;
+        --ink-3: #7B8395;
+        --ink-4: #4E5563;
+        --line: #232833;
         --good: #34D399;
         --moderate: #FBBF24;
         --uhfs: #FB923C;
         --unhealthy: #F87171;
         --very: #A78BFA;
         --hazard: #EF4444;
-        --radius: 8px;
     }
 
     html, body, [class*="st-"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
-    .stApp { background: var(--void) !important; }
-    .block-container { padding-top: 1.1rem; padding-bottom: 2.5rem; max-width: 900px; }
+    .stApp {
+        background: var(--void) !important;
+        background-image: radial-gradient(1100px 520px at 12% -10%, rgba(69,217,200,0.05), transparent 60%) !important;
+        background-attachment: fixed !important;
+    }
+    .block-container { padding-top: 1.1rem; padding-bottom: 2.5rem; max-width: 880px; }
     h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif !important; color: var(--ink) !important; letter-spacing: -0.01em; }
     p, span, label, div { color: var(--ink-2); }
 
-    /* Hide Streamlit chrome */
     [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"],
     section[data-testid="stSidebar"], button[kind="header"],
     [data-testid="stToolbar"], [data-testid="stHeader"],
-    .stApp header, .stApp > header,
-    .stApp > div > div > header {
+    .stApp header, .stApp > header, .stApp > div > div > header {
         display: none !important; width: 0 !important; height: 0 !important;
         min-width: 0 !important; min-height: 0 !important;
         padding: 0 !important; margin: 0 !important;
         overflow: hidden !important; border: none !important;
     }
 
-    /* ===== TOP BAR — plain row, one hairline underneath ===== */
+    /* ===== TOP BAR ===== */
     .topbar {
         display: flex; align-items: baseline; justify-content: space-between;
-        padding-bottom: 10px; flex-wrap: wrap; gap: 6px 14px;
-        border-bottom: 1px solid var(--line);
-        margin-bottom: 4px;
+        padding-bottom: 12px; flex-wrap: wrap; gap: 6px 14px;
+        border-bottom: 1px solid var(--line); margin-bottom: 2px;
     }
     .topbar-left { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-    .brand-word {
-        font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 17px;
-        color: var(--ink); letter-spacing: -0.01em; white-space: nowrap;
-    }
-    .brand-tag {
-        font-size: 12px; color: var(--ink-3); white-space: nowrap;
-    }
+    .brand-word { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px; color: var(--ink); letter-spacing: -0.01em; }
+    .brand-tag { font-size: 12.5px; color: var(--ink-3); }
     .status-line { font-size: 11px; color: var(--ink-4); white-space: nowrap; }
     .status-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 4px; }
     .status-on { background: var(--good); }
     .status-off { background: var(--ink-4); }
-
-    .topbar-right { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-    .clock { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
-    .credit-tag {
-        display: inline-flex; align-items: center; gap: 5px;
-        font-size: 11px; color: var(--ink-4); text-decoration: none; white-space: nowrap;
-        opacity: 0.75; transition: opacity 0.15s, color 0.15s;
-    }
-    .credit-tag:hover { opacity: 1; color: var(--teal); }
+    .topbar-right { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+    .clock { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+    .credit-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--ink-4); text-decoration: none; opacity: 0.8; transition: opacity 0.15s, color 0.15s; }
+    .credit-tag:hover { opacity: 1; color: #45D9C8; }
     .credit-tag .credit-icon { width: 11px; height: 11px; flex-shrink: 0; }
     @media (max-width: 560px) { .credit-tag span.credit-label { display: none; } }
 
-    .strapline { font-size: 13px; color: var(--ink-3); margin: 12px 0 22px; line-height: 1.5; }
+    .strapline { font-size: 13.5px; color: var(--ink-3); margin: 14px 0 20px; line-height: 1.55; }
 
-    /* ===== HERO — no card, just a number and inline stats ===== */
-    .hero-row {
-        display: flex; gap: 32px; align-items: center; flex-wrap: wrap;
-        padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--line);
+    /* ===== HERO — the one signature element: a tinted glow card ===== */
+    .hero-card {
+        position: relative; overflow: hidden;
+        display: flex; align-items: center; justify-content: space-between; gap: 28px; flex-wrap: wrap;
+        border-radius: 20px; border: 1px solid var(--hc-color, var(--line));
+        background:
+            radial-gradient(480px 240px at 0% 0%, color-mix(in srgb, var(--hc-color, #45D9C8) 20%, transparent), transparent 70%),
+            var(--panel);
+        padding: 26px 30px; margin-bottom: 26px;
     }
-    .dial-wrap { position: relative; width: 190px; flex-shrink: 0; }
-    .dial-readout {
-        position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%);
-        text-align: center; width: 100%;
+    .hero-left { display: flex; flex-direction: column; gap: 10px; min-width: 220px; }
+    .hero-num-row { display: flex; align-items: baseline; gap: 12px; }
+    .hero-num { font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 64px; line-height: 1; letter-spacing: -0.03em; }
+    .hero-cat {
+        font-size: 12.5px; font-weight: 700; padding: 4px 11px; border-radius: 999px;
+        background: color-mix(in srgb, var(--hc-color) 18%, var(--panel-2));
+        color: var(--hc-color); white-space: nowrap;
     }
-    .dial-num {
-        font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 40px;
-        line-height: 1; letter-spacing: -0.02em; display: block;
+    .hero-desc { font-size: 12.5px; color: var(--ink-3); }
+    .aqi-scale-wrap { max-width: 280px; margin-top: 4px; }
+    .aqi-scale { position: relative; height: 7px; border-radius: 999px; overflow: visible; display: flex; width: 100%; }
+    .aqi-seg { height: 100%; }
+    .aqi-seg:first-child { border-radius: 999px 0 0 999px; }
+    .aqi-seg:last-child { border-radius: 0 999px 999px 0; }
+    .aqi-marker {
+        position: absolute; top: 50%; width: 13px; height: 13px; border-radius: 50%;
+        background: var(--ink); border: 2px solid var(--void); transform: translate(-50%, -50%);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--hc-color) 35%, transparent);
     }
-    .dial-cat { font-size: 12px; font-weight: 600; margin-top: 4px; }
-    .dial-sub { font-size: 11px; color: var(--ink-4); margin-top: 3px; }
+    .aqi-scale-labels { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--ink-4); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
 
-    .stat-cols { display: flex; gap: 28px; flex-wrap: wrap; flex: 1; }
-    .stat-item { display: flex; flex-direction: column; gap: 2px; min-width: 76px; }
+    .hero-stats { display: grid; grid-template-columns: repeat(2, auto); gap: 16px 32px; }
+    .stat-item { display: flex; flex-direction: column; gap: 3px; }
     .stat-label { font-size: 11px; color: var(--ink-4); }
-    .stat-val { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 19px; color: var(--ink); }
+    .stat-val { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 20px; color: var(--ink); }
     .stat-val .stat-unit { font-size: 11px; font-weight: 500; color: var(--ink-4); margin-left: 2px; }
-    .weather-note { font-size: 12px; color: var(--ink-4); }
-
-    /* ===== SECTION HEAD — text + hairline, no box ===== */
-    .section-head {
-        display: flex; align-items: baseline; justify-content: space-between;
-        margin: 30px 0 12px; flex-wrap: wrap; gap: 4px;
+    .weather-note { font-size: 12.5px; color: var(--ink-4); }
+    @media (max-width: 640px) {
+        .hero-card { padding: 20px; flex-direction: column; align-items: flex-start; }
+        .hero-num { font-size: 52px; }
     }
+
+    /* ===== SECTION HEAD ===== */
+    .section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 30px 0 12px; flex-wrap: wrap; gap: 4px; }
     .section-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px; color: var(--ink) !important; margin: 0; }
-    .section-note { font-size: 11px; color: var(--ink-4); }
+    .section-note { font-size: 11.5px; color: var(--ink-4); }
 
-    /* ===== POLLUTANT LIST — rows with inline bars, not donuts ===== */
-    .poll-row {
-        display: flex; align-items: center; gap: 12px;
-        padding: 9px 0; border-bottom: 1px solid var(--line);
-    }
+    /* ===== POLLUTANT LIST ===== */
+    .poll-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }
     .poll-row:last-child { border-bottom: none; }
-    .poll-name { font-size: 13px; font-weight: 600; color: var(--ink); width: 56px; flex-shrink: 0; }
-    .poll-bar-track { flex: 1; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
-    .poll-bar-fill { height: 100%; border-radius: 3px; }
-    .poll-val { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--ink-2); width: 96px; text-align: right; flex-shrink: 0; }
-    .poll-status { font-size: 11px; font-weight: 600; width: 68px; text-align: right; flex-shrink: 0; }
+    .poll-name { font-size: 13px; font-weight: 600; color: var(--ink); width: 58px; flex-shrink: 0; }
+    .poll-bar-track { flex: 1; height: 7px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+    .poll-bar-fill { height: 100%; border-radius: 4px; }
+    .poll-val { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--ink-2); width: 100px; text-align: right; flex-shrink: 0; }
+    .poll-status { font-size: 11px; font-weight: 700; width: 70px; text-align: right; flex-shrink: 0; }
     @media (max-width: 560px) {
-        .poll-name { width: 42px; }
-        .poll-val { width: 72px; font-size: 11.5px; }
+        .poll-name { width: 44px; }
+        .poll-val { width: 76px; font-size: 11.5px; }
         .poll-status { display: none; }
     }
 
-    /* ===== DAY ROW — plain columns split by hairlines, no tile boxes ===== */
-    .day-row { display: flex; }
-    .day-col {
-        flex: 1; text-align: center; padding: 4px 8px 0;
-        border-left: 1px solid var(--line);
-    }
+    /* ===== DAY ROW ===== */
+    .day-row { display: flex; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+    .day-col { flex: 1; text-align: center; padding: 16px 10px; border-left: 1px solid var(--line); }
     .day-col:first-child { border-left: none; }
     .day-col .d-label { font-size: 12px; color: var(--ink-3); margin: 0; }
-    .day-col .d-val { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 28px; margin: 6px 0 2px; letter-spacing: -0.02em; }
-    .day-col .d-cat { font-size: 11.5px; font-weight: 600; margin: 0; }
-    .day-col .d-range { font-size: 11px; color: var(--ink-4); margin-top: 6px; }
-    @media (max-width: 560px) { .day-col .d-val { font-size: 22px; } }
+    .day-col .d-val { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 30px; margin: 8px 0 3px; letter-spacing: -0.02em; }
+    .day-col .d-cat { font-size: 11.5px; font-weight: 700; margin: 0; }
+    .day-col .d-range { font-size: 11px; color: var(--ink-4); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+    @media (max-width: 560px) { .day-col .d-val { font-size: 23px; } }
 
-    /* ===== GUIDANCE — plain text line with a colored marker, no filled box ===== */
-    .guidance { display: flex; gap: 10px; align-items: flex-start; padding-top: 4px; }
-    .guidance .g-bar { width: 3px; align-self: stretch; border-radius: 2px; flex-shrink: 0; margin-top: 2px; }
+    /* ===== GUIDANCE ===== */
+    .guidance { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; background: color-mix(in srgb, var(--gl-color) 8%, var(--panel)); border: 1px solid color-mix(in srgb, var(--gl-color) 28%, var(--line)); }
+    .guidance .g-bar { width: 4px; align-self: stretch; border-radius: 2px; flex-shrink: 0; background: var(--gl-color); }
     .guidance .g-title { font-weight: 700; font-size: 13px; color: var(--ink) !important; margin: 0 0 2px; }
     .guidance .g-body { font-size: 12.5px; color: var(--ink-3) !important; margin: 0; line-height: 1.5; }
 
-    .stAlert { border-radius: var(--radius) !important; background: #12151B !important; border: 1px solid var(--line) !important; }
+    .stAlert { border-radius: 12px !important; background: var(--panel) !important; border: 1px solid var(--line) !important; }
     .stAlert p { color: var(--ink-2) !important; }
     hr { border-color: var(--line) !important; }
 
-    /* ===== Layout safety ===== */
     .stApp [data-testid="stMain"], .stApp [data-testid="stMainBlockContainer"] {
         margin-left: 0 !important; padding-left: 0 !important; padding-right: 0 !important;
         width: 100% !important; max-width: 100% !important;
     }
-    .block-container {
-        padding-left: 1.1rem !important; padding-right: 1.1rem !important;
-        margin-left: auto !important; margin-right: auto !important;
-    }
-    @media (max-width: 480px) {
-        .block-container { padding-left: 0.8rem !important; padding-right: 0.8rem !important; }
-    }
+    .block-container { padding-left: 1.1rem !important; padding-right: 1.1rem !important; margin-left: auto !important; margin-right: auto !important; }
+    @media (max-width: 480px) { .block-container { padding-left: 0.8rem !important; padding-right: 0.8rem !important; } }
 
-    .footer-note {
-        text-align: center; color: var(--ink-4); font-size: 11px;
-        margin-top: 26px; padding: 16px 0 0; border-top: 1px solid var(--line);
-    }
+    .footer-note { text-align: center; color: var(--ink-4); font-size: 11px; margin-top: 26px; padding: 16px 0 0; border-top: 1px solid var(--line); }
 </style>""", unsafe_allow_html=True)
 
 
@@ -399,47 +386,26 @@ def build_forecast(feature_df, hist_lookback_df, current_aqi, current_row, featu
 
 
 # ---------------------------------------------------------------------------
-# Presentation-only helpers: build the SVG instrument dial for the hero card.
-# Pure rendering (arc geometry for a semicircular gauge whose six segments
-# mirror the exact thresholds used by aqi_info() above) — nothing here
-# touches AQI math, the model, or any data logic.
+# Presentation-only helper: builds the horizontal AQI scale bar markup for
+# the hero card. Segment thresholds mirror aqi_info() exactly. Pure
+# rendering — no AQI math, model, or data logic lives here.
 # ---------------------------------------------------------------------------
-_DIAL_SEGMENTS = [
-    (0, 50, "#34D399"),
-    (50, 100, "#FBBF24"),
-    (100, 150, "#FB923C"),
-    (150, 200, "#F87171"),
-    (200, 300, "#A78BFA"),
-    (300, 500, "#EF4444"),
+_SCALE_SEGMENTS = [
+    (0, 50, "#34D399"), (50, 100, "#FBBF24"), (100, 150, "#FB923C"),
+    (150, 200, "#F87171"), (200, 300, "#A78BFA"), (300, 500, "#EF4444"),
 ]
 
-def _dial_point(cx, cy, r, angle_deg):
-    a = math.radians(angle_deg)
-    return cx + r * math.cos(a), cy - r * math.sin(a)
-
-def _dial_arc(cx, cy, r, v_lo, v_hi, scale_max=500):
-    a_lo = 180 * (1 - v_lo / scale_max)
-    a_hi = 180 * (1 - v_hi / scale_max)
-    x1, y1 = _dial_point(cx, cy, r, a_lo)
-    x2, y2 = _dial_point(cx, cy, r, a_hi)
-    return f"M {x1:.2f} {y1:.2f} A {r} {r} 0 0 1 {x2:.2f} {y2:.2f}"
-
-def build_dial_svg(value, scale_max=500):
-    cx, cy, r = 95, 92, 78
-    needle_val = max(0, min(value, scale_max))
-    needle_angle = 180 * (1 - needle_val / scale_max)
-    nx, ny = _dial_point(cx, cy, r + 1, needle_angle)
-    tx, ty = _dial_point(cx, cy, r - 16, needle_angle)
+def build_aqi_scale_html(value, scale_max=500):
     segs = "".join(
-        f"<path d='{_dial_arc(cx, cy, r, lo, hi, scale_max)}' stroke='{c}' stroke-width='9' "
-        f"stroke-linecap='butt' fill='none' opacity='0.9'/>"
-        for lo, hi, c in _DIAL_SEGMENTS
+        f"<div class='aqi-seg' style='flex:{hi - lo}; background:{c}'></div>"
+        for lo, hi, c in _SCALE_SEGMENTS
     )
-    return f"""<svg viewBox="0 0 190 108" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;overflow:visible;">
-        {segs}
-        <line x1="{tx:.2f}" y1="{ty:.2f}" x2="{nx:.2f}" y2="{ny:.2f}" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/>
-        <circle cx="{nx:.2f}" cy="{ny:.2f}" r="3.5" fill="var(--ink)"/>
-    </svg>"""
+    pct = max(0.0, min(value, scale_max)) / scale_max * 100
+    return f"""
+    <div class='aqi-scale-wrap'>
+        <div class='aqi-scale'>{segs}<div class='aqi-marker' style='left:{pct:.1f}%'></div></div>
+        <div class='aqi-scale-labels'><span>0</span><span>150</span><span>300</span><span>500</span></div>
+    </div>"""
 
 
 try:
@@ -470,7 +436,7 @@ try:
     <p class='strapline'>Live pollutant readings, hourly trend and a 72-hour forecast for {LAT:.2f}°N, {LON:.2f}°E.</p>
     """)
 
-    # ===== HERO: dial + key stats, inline, no card =====
+    # ===== HERO CARD =====
     if weather_ok:
         stats_html = f"""
         <div class='stat-item'><span class='stat-label'>Temperature</span><span class='stat-val'>{weather['temperature_2m']:.1f}<span class='stat-unit'>°C</span></span></div>
@@ -479,25 +445,24 @@ try:
         <div class='stat-item'><span class='stat-label'>Pressure</span><span class='stat-val'>{weather['surface_pressure']:.0f}<span class='stat-unit'>hPa</span></span></div>
         """
     else:
-        stats_html = "<span class='weather-note'>Weather data temporarily unavailable (Open-Meteo)</span>"
+        stats_html = "<span class='weather-note'>Weather data<br>temporarily unavailable</span>"
 
     st.html(f"""
-    <div class='hero-row'>
-        <div class='dial-wrap'>
-            {build_dial_svg(current_aqi)}
-            <div class='dial-readout'>
-                <span class='dial-num' style='color:{color}'>{current_aqi:.0f}</span>
-                <div class='dial-cat' style='color:{color}'>{cat}</div>
-                <div class='dial-sub'>{cat_desc} · {dominant.upper()}</div>
+    <div class='hero-card' style='--hc-color:{color}'>
+        <div class='hero-left'>
+            <div class='hero-num-row'>
+                <span class='hero-num' style='color:{color}'>{current_aqi:.0f}</span>
+                <span class='hero-cat'>{cat}</span>
             </div>
+            <span class='hero-desc'>{cat_desc} · dominant pollutant {dominant.upper()}</span>
+            {build_aqi_scale_html(current_aqi)}
         </div>
-        <div class='stat-cols'>{stats_html}</div>
+        <div class='hero-stats'>{stats_html}</div>
     </div>
     """)
 
     # ===== POLLUTANT LEVELS =====
-    st.html("""
-    <div class='section-head'><h3 class='section-title'>Pollutant levels</h3></div>""")
+    st.html("<div class='section-head'><h3 class='section-title'>Pollutant levels</h3></div>")
     show_p = {k: v for k, v in pollution.items() if k not in ["no", "nh3"]}
     threshold = {"pm2_5": 75, "pm10": 150, "no2": 100, "so2": 75, "o3": 70, "co": 10000}
     names = {"pm2_5": "PM2.5", "pm10": "PM10", "no2": "NO₂", "so2": "SO₂", "o3": "O₃", "co": "CO"}
@@ -506,12 +471,11 @@ try:
         pct = min(val / threshold.get(p, 100) * 100, 100)
         status = "Low" if pct < 40 else "Moderate" if pct < 70 else "High"
         gcolor = "#34D399" if pct < 40 else "#FBBF24" if pct < 70 else "#F87171"
-        unit = "µg/m³" if p != "co" else "µg/m³"
         rows += f"""
         <div class='poll-row'>
             <span class='poll-name'>{names.get(p, p.upper())}</span>
             <span class='poll-bar-track'><span class='poll-bar-fill' style='width:{pct:.0f}%; background:{gcolor}'></span></span>
-            <span class='poll-val'>{val:.1f} {unit}</span>
+            <span class='poll-val'>{val:.1f} µg/m³</span>
             <span class='poll-status' style='color:{gcolor}'>{status}</span>
         </div>"""
     st.html(rows)
@@ -538,8 +502,14 @@ try:
                 st.warning("No trend data available yet.")
         else:
             fig, ax = plt.subplots(figsize=(10, 2.8))
-            fig.patch.set_facecolor("#0B0D11")
-            ax.set_facecolor("#0B0D11")
+            fig.patch.set_facecolor("#0A0C10")
+            ax.set_facecolor("#0A0C10")
+            ds = now_karachi.replace(hour=0, minute=0, second=0, microsecond=0)
+            de = now_karachi.replace(hour=23, minute=59, second=0, microsecond=0)
+            ax.fill_between([ds, de], 0, 50, alpha=0.08, color="#34D399")
+            ax.fill_between([ds, de], 50, 100, alpha=0.08, color="#FBBF24")
+            ax.fill_between([ds, de], 100, 150, alpha=0.08, color="#FB923C")
+            ax.fill_between([ds, de], 150, 200, alpha=0.08, color="#F87171")
             all_vals = []
             if not hist_df.empty:
                 ax.plot(hist_df["datetime"], hist_df["aqi"], color=color, linewidth=1.8, label="Measured", zorder=5)
@@ -547,15 +517,15 @@ try:
             if future_times:
                 ax.plot(future_times, future_preds, color=color, linewidth=1.5, linestyle="--", alpha=0.65, label="Predicted", zorder=5)
                 all_vals += future_preds
-            ax.scatter([now_karachi], [current_aqi], color=color, s=44, zorder=6, edgecolors="#0B0D11", linewidths=1.5, label="Now")
-            ax.set_ylabel("AQI", color="#767E8F", fontsize=9)
+            ax.scatter([now_karachi], [current_aqi], color=color, s=48, zorder=6, edgecolors="#0A0C10", linewidths=1.5, label="Now")
+            ax.set_ylabel("AQI", color="#7B8395", fontsize=9)
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%I %p", tz=KARACHI_TZ))
-            ax.grid(True, axis="y", alpha=0.12, color="#767E8F", linestyle="-", linewidth=0.6)
+            ax.grid(True, axis="y", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
             ax.grid(False, axis="x")
-            ax.tick_params(colors="#767E8F", labelsize=8)
+            ax.tick_params(colors="#7B8395", labelsize=8)
             for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
             for s in ax.spines.values(): s.set_visible(False)
-            ax.legend(frameon=False, labelcolor="#ABB2C0", fontsize=8, loc="upper right")
+            ax.legend(frameon=False, labelcolor="#B4BBC9", fontsize=8, loc="upper right")
             if all_vals: ax.set_ylim(max(0, min(all_vals) - 10), max(all_vals) + 10)
             plt.tight_layout()
             st.pyplot(fig)
@@ -601,17 +571,17 @@ try:
                 st.html(day_cols_html)
 
                 fig, ax = plt.subplots(figsize=(10, 1.9))
-                fig.patch.set_facecolor("#0B0D11")
-                ax.set_facecolor("#0B0D11")
+                fig.patch.set_facecolor("#0A0C10")
+                ax.set_facecolor("#0A0C10")
                 ax.plot(fdf["datetime"], fdf["aqi"], color=color, linewidth=1.4)
                 ax.fill_between(fdf["datetime"], fdf["aqi"] - 3, fdf["aqi"] + 3, alpha=0.10, color=color)
                 ax.axhline(100, color="#FBBF24", linestyle="--", alpha=0.4, linewidth=0.6)
                 ax.axhline(150, color="#FB923C", linestyle="--", alpha=0.4, linewidth=0.6)
-                ax.set_ylabel("AQI", color="#767E8F", fontsize=9)
+                ax.set_ylabel("AQI", color="#7B8395", fontsize=9)
                 ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d", tz=KARACHI_TZ))
-                ax.grid(True, axis="y", alpha=0.12, color="#767E8F", linestyle="-", linewidth=0.6)
+                ax.grid(True, axis="y", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
                 ax.grid(False, axis="x")
-                ax.tick_params(colors="#767E8F", labelsize=7)
+                ax.tick_params(colors="#7B8395", labelsize=7)
                 for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
                 for s in ax.spines.values(): s.set_visible(False)
                 plt.tight_layout()
@@ -624,7 +594,7 @@ try:
                     gc, gt, gb = "#FBBF24", "Elevated AQI expected", "Sensitive groups should limit outdoor time."
                 else:
                     gc, gt, gb = "#34D399", "Within safe range", "No elevated AQI expected."
-                st.html(f"""<div class='guidance' style='margin-top:12px;'><span class='g-bar' style='background:{gc}'></span><div><p class='g-title'>{gt}</p><p class='g-body'>{gb}</p></div></div>""")
+                st.html(f"""<div class='guidance' style='--gl-color:{gc}; margin-top:14px;'><span class='g-bar'></span><div><p class='g-title'>{gt}</p><p class='g-body'>{gb}</p></div></div>""")
     except Exception as e:
         st.error(f"Forecast: {e}")
 
@@ -640,7 +610,7 @@ try:
     tb, tc = tips.get(cat, ("", color))
     st.html(f"""
     <div class='section-head'><h3 class='section-title'>Health guidance</h3></div>
-    <div class='guidance'><span class='g-bar' style='background:{tc}'></span><div><p class='g-title'>{cat}</p><p class='g-body'>{tb}</p></div></div>
+    <div class='guidance' style='--gl-color:{tc}'><span class='g-bar'></span><div><p class='g-title'>{cat}</p><p class='g-body'>{tb}</p></div></div>
     """)
 
 except Exception as e:
