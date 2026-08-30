@@ -131,8 +131,58 @@ st.markdown("""<style>
     .clock .clock-date { color: var(--ink-2); font-weight: 600; }
     .clock .clock-time { color: var(--ink-4); font-size: 10.5px; }
 
+    /* ===== CREATOR CREDIT (top-right) ===== */
+    .credit-tag {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500;
+        color: var(--ink-4); text-decoration: none; white-space: nowrap;
+        padding: 4px 10px 4px 8px; border-radius: 999px;
+        background: transparent; border: 1px solid transparent;
+        opacity: 0.62; transition: opacity 0.2s, background 0.2s, border-color 0.2s, transform 0.15s;
+    }
+    .credit-tag:hover {
+        opacity: 1; background: var(--white); border-color: var(--border);
+        box-shadow: var(--shadow-xs); transform: translateY(-1px);
+        color: var(--accent-blue);
+    }
+    .credit-tag .credit-icon {
+        width: 12px; height: 12px; flex-shrink: 0; opacity: 0.9;
+        color: #0A66C2; /* LinkedIn blue, only visible on hover-adjacent contexts */
+    }
+    .credit-divider {
+        width: 1px; height: 16px; background: var(--border-2); opacity: 0.7;
+    }
+    @media (max-width: 560px) {
+        .credit-tag span.credit-label { display: none; }
+        .credit-tag { padding: 4px; }
+    }
+
+    /* ===== PAGE HEADLINE ===== */
+    .page-head { padding: 2px 4px 20px; }
+    .page-title {
+        font-weight: 900; font-size: 30px; color: var(--ink) !important;
+        letter-spacing: -0.035em; line-height: 1.1; margin: 0 0 6px;
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .page-title .page-title-accent {
+        background: linear-gradient(120deg, var(--accent-blue) 0%, #7C3AED 100%);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .page-subtitle {
+        font-size: 13.5px; color: var(--ink-3) !important; font-weight: 500;
+        margin: 0; letter-spacing: -0.005em;
+    }
+    @media (max-width: 560px) {
+        .page-title { font-size: 22px; }
+        .page-subtitle { font-size: 12px; }
+    }
+
     /* ===== HERO ROW ===== */
-    .hero-row { display: flex; gap: 18px; margin: 4px 0 18px; align-items: stretch; }
+    .hero-row { display: flex; gap: 18px; margin: 4px 0 18px; align-items: stretch; flex-wrap: wrap; }
+    @media (max-width: 720px) {
+        .hero-row { flex-direction: column; }
+        .hero-card { min-width: 0; width: 100%; padding: 22px 20px 20px; }
+    }
     .hero-card {
         background: var(--white);
         border: 1px solid var(--border);
@@ -179,6 +229,7 @@ st.markdown("""<style>
         flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
     }
     @media (max-width: 700px) { .weather-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 420px) { .weather-grid { grid-template-columns: 1fr; } }
     .w-card {
         background: var(--white);
         border: 1px solid var(--border);
@@ -244,6 +295,11 @@ st.markdown("""<style>
         50% { transform: scale(1.12); opacity: 0.06; }
     }
     @media (prefers-reduced-motion: reduce) { .halo-mini-ring { animation: none !important; } }
+    @media (max-width: 420px) {
+        .halo-mini { width: 108px; height: 108px; }
+        .halo-mini-core { width: 86px; height: 86px; }
+        .halo-mini-core span { font-size: 34px !important; }
+    }
 
     /* ===== PANELS ===== */
     .panel {
@@ -268,10 +324,16 @@ st.markdown("""<style>
         font-family: 'JetBrains Mono', monospace; font-size: 10px;
         color: var(--ink-4); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 500;
     }
+    @media (max-width: 560px) {
+        .panel { padding: 16px 16px 18px; border-radius: var(--radius-lg); }
+        .panel-title { font-size: 14px; }
+        .panel-head { flex-wrap: wrap; gap: 6px; }
+    }
 
     /* ===== POLLUTANT GAUGES ===== */
     .gauge-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; }
     @media (max-width: 900px) { .gauge-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 420px) { .gauge-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; } }
     .gauge-cell {
         display: flex; flex-direction: column; align-items: center; gap: 9px;
         padding: 10px 6px; border-radius: var(--radius);
@@ -329,6 +391,10 @@ st.markdown("""<style>
         font-size: 10px; margin-top: 10px; font-weight: 500;
         padding-top: 8px; border-top: 1px dashed var(--white-3);
     }
+    @media (max-width: 560px) {
+        .day-tile { padding: 14px 8px 12px; }
+        .day-tile .d-val { font-size: 24px; }
+    }
 
     /* ===== GUIDANCE ===== */
     .guidance {
@@ -376,6 +442,11 @@ st.markdown("""<style>
         padding-left: 1.25rem !important; padding-right: 1.25rem !important;
         max-width: 1240px !important;
         margin-left: auto !important; margin-right: auto !important;
+    }
+    @media (max-width: 480px) {
+        .block-container {
+            padding-left: 0.75rem !important; padding-right: 0.75rem !important;
+        }
     }
 
     .footer-note {
@@ -626,7 +697,22 @@ try:
         </div>
         <div class='top-bar-right'>
             <span class='clock'><span class='clock-date'>{now_karachi.strftime('%a %d %b')}</span><br><span class='clock-time'>{now_karachi.strftime('%I:%M %p')} PKT</span></span>
+            <span class='credit-divider'></span>
+            <a class='credit-tag' href='https://www.linkedin.com/in/warisha-siddiqui/' target='_blank' rel='noopener noreferrer' title='Warisha Arshad on LinkedIn'>
+                <svg class='credit-icon' viewBox='0 0 24 24' fill='currentColor' xmlns='http://www.w3.org/2000/svg'><path d='M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.44-2.14 2.94v5.67H9.34V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.38-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.07 2.07 0 1 1 0-4.13 2.07 2.07 0 0 1 0 4.13zM7.13 20.45H3.56V9h3.57v11.45zM22.22 0H1.77C.8 0 0 .78 0 1.75v20.5C0 23.22.8 24 1.77 24h20.45c.98 0 1.78-.78 1.78-1.75V1.75C24 .78 23.2 0 22.22 0z'/></svg>
+                <span class='credit-label'>by Warisha Arshad</span>
+            </a>
         </div>
+    </div>
+    """)
+
+    # ===== PAGE HEADLINE =====
+    # Clear, page-level heading + one-line subtitle so the dashboard's purpose
+    # is legible at a glance, above the live status chips in the top bar.
+    st.html(f"""
+    <div class='page-head'>
+        <h1 class='page-title'>Karachi <span class='page-title-accent'>Air Quality</span></h1>
+        <p class='page-subtitle'>Live pollutant readings, hourly trend and a 72-hour AI forecast for {LAT:.2f}°N, {LON:.2f}°E</p>
     </div>
     """)
 
