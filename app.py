@@ -639,13 +639,19 @@ try:
     try:
         is_lstm = "LSTM" in type(model).__name__ or type(model).__name__ == "Sequential"
         min_rows_needed = SHAP_TIMESTEPS + 2 if is_lstm else 1
-        if hist_lookback_df is None or hist_lookback_df.empty or not all(c in hist_lookback_df.columns for c in feature_cols):
-            st.info("Explainability needs recent feature-store data, which isn't available right now.")
+        if hist_lookback_df is None or hist_lookback_df.empty:
+            if not _has_hw:
+                st.info("Explainability needs the Hopsworks feature store, but HOPSWORKS_API_KEY isn't set for this app.")
+            else:
+                st.info("Explainability needs recent feature-store data — the read from Hopsworks came back empty (check the app logs for the underlying error).")
+        elif not all(c in hist_lookback_df.columns for c in feature_cols):
+            missing = [c for c in feature_cols if c not in hist_lookback_df.columns]
+            st.info(f"Explainability skipped — the feature store is missing columns the model expects: {', '.join(missing)}.")
         else:
             hist_sorted = hist_lookback_df.sort_values("datetime")
             feat_hist = hist_sorted[feature_cols].dropna()
             if len(feat_hist) < min_rows_needed:
-                st.info("Not enough recent history yet to explain this forecast.")
+                st.info(f"Not enough recent history yet to explain this forecast — got {len(feat_hist)} complete rows, need at least {min_rows_needed} ({model_source}).")
             else:
                 feature_names, shap_values = None, None
 
