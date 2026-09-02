@@ -11,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 
 HOPSWORKS_API_KEY = os.environ["HOPSWORKS_API_KEY"]
 FEATURE_GROUP_NAME = "aqi_features_karachi"
-FEATURE_GROUP_VERSION = 1
+FEATURE_GROUP_VERSION = 2
 CORR_THRESHOLD = 0.10
 TIMESTEPS = 24  # for LSTM sequences
 
@@ -53,6 +53,7 @@ def select_features(df):
         "pm2_5", "pm10", "so2", "co", "no2", "o3", "pressure", "wind_speed",
         "humidity", "temperature", "month", "hour", "day_of_week", "is_weekend",
         "aqi_lag_1", "aqi_lag_3", "aqi_lag_24", "pm25_lag_1", "pm25_lag_24",
+        "aqi_change_rate", "pm25_change_rate",
         "aqi_rolling_3", "aqi_rolling_6", "aqi_rolling_24", "pm25_rolling_24",
     ]
     candidate_features = [c for c in candidate_features if c in df.columns]
