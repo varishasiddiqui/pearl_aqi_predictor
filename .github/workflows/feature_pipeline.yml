@@ -3,12 +3,12 @@ name: Feature Pipeline
 on:
   schedule:
     - cron: "5 * * * *"
-  workflow_dispatch: {}  # allows manual "Run workflow" from the Actions tab
+  workflow_dispatch: {}  # optional manual trigger — not required, pipeline self-backfills automatically
 
 jobs:
   run-feature-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -23,4 +23,5 @@ jobs:
         env:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}  # optional — hazard-AQI alerts skip silently if unset
         run: python feature_pipeline.py
