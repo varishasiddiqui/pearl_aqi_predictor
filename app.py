@@ -259,12 +259,16 @@ def fetch_recent_actuals_from_feature_store(lookback_hours=72):
         fg = fs.get_feature_group(name=FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
         df = fg.read()
         if df.empty:
+            print("fetch_recent_actuals_from_feature_store: read succeeded but feature group is empty.")
             return df
         df["datetime"] = pd.to_datetime(df["datetime"]).dt.tz_convert(KARACHI_TZ)
         window_start = now_karachi - pd.Timedelta(hours=lookback_hours)
         df = df[(df["datetime"] >= window_start) & (df["datetime"] <= now_karachi)]
         return df.sort_values("datetime").reset_index(drop=True)
-    except Exception:
+    except Exception as e:
+        import traceback
+        print(f"fetch_recent_actuals_from_feature_store failed: {e}")
+        print(traceback.format_exc())
         return pd.DataFrame()
 
 
