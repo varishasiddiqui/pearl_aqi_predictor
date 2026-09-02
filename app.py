@@ -7,6 +7,7 @@ import math
 from datetime import datetime, timedelta, timezone
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import shap
 
 KARACHI_TZ = timezone(timedelta(hours=5))
 LAT, LON = 24.8607, 67.0011
@@ -215,6 +216,25 @@ def load_model():
 
 
 model, scaler, feature_cols, model_source = load_model()
+
+
+# ---------------------------------------------------------------------------
+# SHAP explainability — read-only, built on top of the already-loaded model.
+# Does not touch training/prediction logic; just explains it.
+# ---------------------------------------------------------------------------
+@st.cache_resource
+def build_shap_explainer(_model, _background_scaled):
+    from sklearn.linear_model import Ridge
+    from sklearn.ensemble import RandomForestRegressor
+
+    if isinstance(_model, RandomForestRegressor):
+        return shap.TreeExplainer(_model), "tree"
+    elif isinstance(_model, Ridge):
+        return shap.LinearExplainer(_model, _background_scaled), "linear"
+    else:
+        # LSTM / anything else: no lightweight SHAP path wired up for this yet.
+        return None, "unsupported"
+
 
 _has_ow = bool(st.secrets.get("OPENWEATHER_API_KEY", ""))
 _has_hw = bool(st.secrets.get("HOPSWORKS_API_KEY", ""))
@@ -604,6 +624,59 @@ try:
                 st.html(f"""<div class='guidance' style='--gl-color:{gc}; margin-top:14px;'><span class='g-bar'></span><div><p class='g-title'>{gt}</p><p class='g-body'>{gb}</p></div></div>""")
     except Exception as e:
         st.error(f"Forecast: {e}")
+
+    # ===== SHAP EXPLAINABILITY =====
+    st.html("""
+    <div class='section-head'>
+        <h3 class='section-title'>Why this forecast</h3>
+        <span class='section-note'>SHAP feature contributions</span>
+    </div>""")
+    try:
+        if hist_lookback_df is None or hist_lookback_df.empty or not all(c in hist_lookback_df.columns for c in feature_cols):
+            st.info("Explainability needs recent feature-store data, which isn't available right now.")
+        else:
+            latest_row = hist_lookback_df.sort_values("datetime").iloc[[-1]]
+            X_latest = latest_row[feature_cols].dropna(axis=1)
+            X_latest = X_latest[[c for c in feature_cols if c in X_latest.columns]]
+            if X_latest.empty or X_latest.shape[1] == 0:
+                st.info("Not enough complete feature values yet to explain the latest prediction.")
+            else:
+                bg_pool = hist_lookback_df[feature_cols].dropna()
+                if bg_pool.empty:
+                    st.info("Not enough historical rows yet to build a SHAP background sample.")
+                else:
+                    bg_sample = bg_pool.sample(min(50, len(bg_pool)), random_state=42)
+                    bg_scaled = scaler.transform(bg_sample[feature_cols])
+                    X_latest_full = latest_row[feature_cols].fillna(bg_sample[feature_cols].mean())
+                    X_latest_scaled = scaler.transform(X_latest_full)
+
+                    explainer, kind = build_shap_explainer(model, bg_scaled)
+                    if explainer is None:
+                        st.info(f"SHAP explainability isn't available for the current model type ({model_source}).")
+                    else:
+                        sv = explainer.shap_values(X_latest_scaled)
+                        sv = np.array(sv).flatten()
+                        shap_df = pd.DataFrame({"feature": feature_cols, "shap": sv})
+                        shap_df["abs_shap"] = shap_df["shap"].abs()
+                        shap_df = shap_df.sort_values("abs_shap", ascending=True).tail(8)
+
+                        fig, ax = plt.subplots(figsize=(10, max(2.2, 0.32 * len(shap_df))))
+                        fig.patch.set_facecolor("#0A0C10")
+                        ax.set_facecolor("#0A0C10")
+                        bar_colors = ["#F87171" if v > 0 else "#34D399" for v in shap_df["shap"]]
+                        ax.barh(shap_df["feature"], shap_df["shap"], color=bar_colors, height=0.6)
+                        ax.axvline(0, color="#4E5563", linewidth=0.8)
+                        ax.set_xlabel("Impact on predicted AQI (SHAP value)", color="#7B8395", fontsize=9)
+                        ax.tick_params(colors="#7B8395", labelsize=9)
+                        for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
+                        for s in ax.spines.values(): s.set_visible(False)
+                        ax.grid(True, axis="x", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        plt.close(fig)
+                        st.html("<p class='section-note'>Red pushes the forecast up, green pulls it down. Based on the most recent stored feature snapshot.</p>")
+    except Exception as e:
+        st.error(f"Explainability: {e}")
 
     # ===== GUIDANCE =====
     tips = {
