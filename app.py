@@ -12,7 +12,7 @@ import shap
 KARACHI_TZ = timezone(timedelta(hours=5))
 LAT, LON = 24.8607, 67.0011
 FEATURE_GROUP_NAME = "aqi_features_karachi"
-FEATURE_GROUP_VERSION = 1
+FEATURE_GROUP_VERSION = 2
 MODEL_NAME = "aqi_predictor_karachi"
 
 now_karachi = pd.Timestamp.now(tz="UTC").tz_convert(KARACHI_TZ)
@@ -405,7 +405,10 @@ def build_forecast(feature_df, hist_lookback_df, current_aqi, current_row, featu
             "is_weekend": int(dt.dayofweek in (5, 6)),
             "aqi_lag_1": lag(aqi_history, 1), "aqi_lag_3": lag(aqi_history, 3),
             "aqi_lag_24": lag(aqi_history, 24), "pm25_lag_1": lag(pm25_history, 1),
-            "pm25_lag_24": lag(pm25_history, 24), "aqi_rolling_3": rolling(aqi_history, 3),
+            "pm25_lag_24": lag(pm25_history, 24),
+            "aqi_change_rate": aqi_history[-1] - lag(aqi_history, 2) if len(aqi_history) >= 2 else 0.0,
+            "pm25_change_rate": pm25_history[-1] - lag(pm25_history, 2) if len(pm25_history) >= 2 else 0.0,
+            "aqi_rolling_3": rolling(aqi_history, 3),
             "aqi_rolling_6": rolling(aqi_history, 6), "aqi_rolling_24": rolling(aqi_history, 24),
             "pm25_rolling_24": rolling(pm25_history, 24),
         }
