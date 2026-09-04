@@ -9,6 +9,14 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import shap
 
+# 'Inter'/'Space Grotesk' are loaded via CSS for the browser, but matplotlib
+# renders server-side and doesn't have them installed — every ax label call
+# that requested fontfamily='Inter' was silently falling back to DejaVu Sans
+# anyway, just with a "findfont: Font family 'Inter' not found" warning
+# printed per element. Set the real fallback explicitly so charts still
+# look right and the logs stay clean.
+plt.rcParams["font.family"] = "DejaVu Sans"
+
 KARACHI_TZ = timezone(timedelta(hours=5))
 LAT, LON = 24.8607, 67.0011
 FEATURE_GROUP_NAME = "aqi_features_karachi"
@@ -306,11 +314,33 @@ def fetch_full_history_from_feature_store():
     if not hopsworks_key:
         return pd.DataFrame()
     try:
+        import time
         import hopsworks
         project = hopsworks.login(api_key_value=hopsworks_key)
         fs = project.get_feature_store()
         fg = fs.get_feature_group(name=FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
-        df = fg.read()
+
+        # Hopsworks' Arrow Flight query service can drop the connection on
+        # large, unfiltered reads ("Flight returned unavailable error ...
+        # Socket closed") — this is transient/server-side, not app logic.
+        # Retry a couple of times on the fast path, then fall back to the
+        # Hive/Spark-based read, which is slower but far more tolerant of
+        # big, unfiltered scans like this one.
+        df, last_err = None, None
+        attempts = [{}, {}, {"use_hive": True}]
+        for i, read_options in enumerate(attempts, start=1):
+            try:
+                df = fg.read(read_options=read_options) if read_options else fg.read()
+                break
+            except Exception as e:
+                last_err = e
+                print(f"fetch_full_history_from_feature_store: attempt {i}/{len(attempts)} failed: {e}")
+                if i < len(attempts):
+                    time.sleep(2)
+                continue
+        if df is None:
+            raise last_err
+
         if df.empty:
             print("fetch_full_history_from_feature_store: read succeeded but feature group is empty.")
             return df
@@ -892,7 +922,7 @@ try:
                 if not _has_hw:
                     st.info("Historical insights need the Hopsworks feature store, but HOPSWORKS_API_KEY isn't set for this app.")
                 else:
-                    st.info("Historical insights unavailable — the read from the feature store came back empty. Run the backfill in feature_pipeline.py first.")
+                    st.info("Historical insights unavailable — either the feature group is empty (run the backfill in feature_pipeline.py) or the last read from Hopsworks' query service timed out. This section retries automatically; try refreshing the page in a minute.")
             else:
                 n_rows = len(full_hist_df)
                 span_start = full_hist_df["datetime"].min().strftime("%d %b %Y")
