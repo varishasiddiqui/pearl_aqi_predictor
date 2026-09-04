@@ -37,6 +37,7 @@ st.markdown("""<style>
         --unhealthy: #F87171;
         --very: #A78BFA;
         --hazard: #EF4444;
+        --insight: #4338CA;
     }
 
     html, body, [class*="st-"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
@@ -80,6 +81,14 @@ st.markdown("""<style>
     @media (max-width: 560px) { .credit-tag span.credit-label { display: none; } }
 
     .strapline { font-size: 13.5px; color: var(--ink-3); margin: 14px 0 20px; line-height: 1.55; }
+
+    /* ===== NAV TABS ===== */
+    .stTabs [data-baseweb="tab-list"] { gap: 6px; border-bottom: 1px solid var(--line); }
+    .stTabs [data-baseweb="tab"] {
+        background: transparent; color: var(--ink-3) !important; font-family: 'Space Grotesk', sans-serif;
+        font-weight: 600; font-size: 13.5px; padding: 8px 4px; border-radius: 0;
+    }
+    .stTabs [aria-selected="true"] { color: var(--ink) !important; border-bottom: 2px solid #45D9C8 !important; }
 
     /* ===== HERO — the one signature element: a tinted glow card ===== */
     .hero-card {
@@ -162,6 +171,18 @@ st.markdown("""<style>
     .guidance .g-bar { width: 4px; align-self: stretch; border-radius: 2px; flex-shrink: 0; background: var(--gl-color); }
     .guidance .g-title { font-weight: 700; font-size: 13px; color: var(--ink) !important; margin: 0 0 2px; }
     .guidance .g-body { font-size: 12.5px; color: var(--ink-3) !important; margin: 0; line-height: 1.5; }
+
+    /* ===== INSIGHT BANNER (EDA section headers) ===== */
+    .insight-banner {
+        background: linear-gradient(135deg, #4338CA, #3730A3);
+        border-radius: 14px; padding: 16px 20px; margin: 4px 0 12px;
+    }
+    .insight-banner .ib-title {
+        font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 14.5px;
+        color: #FFFFFF !important; letter-spacing: 0.02em; margin: 0 0 4px; text-transform: uppercase;
+    }
+    .insight-banner .ib-body { font-size: 12px; color: #DCDDF7 !important; margin: 0; }
+    .insight-caption { font-size: 11px; color: var(--ink-4); margin: 0 0 6px; }
 
     .stAlert { border-radius: 12px !important; background: var(--panel) !important; border: 1px solid var(--line) !important; }
     .stAlert p { color: var(--ink-2) !important; }
@@ -268,6 +289,36 @@ def fetch_recent_actuals_from_feature_store(lookback_hours=72):
     except Exception as e:
         import traceback
         print(f"fetch_recent_actuals_from_feature_store failed: {e}")
+        print(traceback.format_exc())
+        return pd.DataFrame()
+
+
+# ---------------------------------------------------------------------------
+# Full history for EDA / historical insights — same feature group as above,
+# but no lookback trim. This is the Streamlit-native equivalent of eda.py's
+# load_data(), used to power the "Historical insights" section below.
+# Cached longer (1h) since full-history reads are heavier and this data
+# doesn't need to be as fresh as the live/trend sections.
+# ---------------------------------------------------------------------------
+@st.cache_data(ttl=3600)
+def fetch_full_history_from_feature_store():
+    hopsworks_key = st.secrets.get("HOPSWORKS_API_KEY", "")
+    if not hopsworks_key:
+        return pd.DataFrame()
+    try:
+        import hopsworks
+        project = hopsworks.login(api_key_value=hopsworks_key)
+        fs = project.get_feature_store()
+        fg = fs.get_feature_group(name=FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
+        df = fg.read()
+        if df.empty:
+            print("fetch_full_history_from_feature_store: read succeeded but feature group is empty.")
+            return df
+        df["datetime"] = pd.to_datetime(df["datetime"]).dt.tz_convert(KARACHI_TZ)
+        return df.sort_values("datetime").reset_index(drop=True)
+    except Exception as e:
+        import traceback
+        print(f"fetch_full_history_from_feature_store failed: {e}")
         print(traceback.format_exc())
         return pd.DataFrame()
 
@@ -445,6 +496,94 @@ def build_aqi_scale_html(value, scale_max=500):
     </div>"""
 
 
+# ---------------------------------------------------------------------------
+# EDA / historical-insights plots — dark-themed inline equivalents of the
+# PNGs eda.py saves to disk. Same underlying computations (groupby hour /
+# month, .corr()), just rendered straight into the app instead of a file.
+# ---------------------------------------------------------------------------
+def _style_dark_ax(ax, show_x_grid=False):
+    ax.set_facecolor("#0A0C10")
+    ax.tick_params(colors="#7B8395", labelsize=8)
+    for lab in ax.get_xticklabels() + ax.get_yticklabels():
+        lab.set_fontfamily("Inter")
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.grid(True, axis="y", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
+    ax.grid(show_x_grid, axis="x")
+
+
+def plot_full_aqi_timeseries(df):
+    fig, ax = plt.subplots(figsize=(6.6, 3.1))
+    fig.patch.set_facecolor("#0A0C10")
+    ax.plot(df["datetime"], df["aqi"], color="#45D9C8", linewidth=0.9)
+    for y, c in [(50, "#34D399"), (100, "#FBBF24"), (150, "#FB923C"), (200, "#F87171")]:
+        ax.axhline(y, color=c, linestyle="--", alpha=0.35, linewidth=0.7)
+    ax.set_ylabel("AQI", color="#7B8395", fontsize=9)
+    ax.set_xlabel("Date", color="#7B8395", fontsize=9)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m", tz=KARACHI_TZ))
+    _style_dark_ax(ax)
+    plt.tight_layout()
+    return fig
+
+
+def plot_hourly_avg(df):
+    hourly = df.groupby("hour")["aqi"].mean().reindex(range(24))
+    fig, ax = plt.subplots(figsize=(6.6, 3.1))
+    fig.patch.set_facecolor("#0A0C10")
+    ax.bar(hourly.index, hourly.values, color="#34D399")
+    ax.axhline(100, color="#FBBF24", linestyle="--", alpha=0.4, linewidth=0.7, label="Moderate threshold")
+    ax.axhline(150, color="#FB923C", linestyle="--", alpha=0.4, linewidth=0.7, label="Unhealthy threshold")
+    ax.set_xlabel("Hour of day (0 = midnight)", color="#7B8395", fontsize=9)
+    ax.set_ylabel("Average AQI", color="#7B8395", fontsize=9)
+    ax.set_xticks(range(0, 24, 1))
+    ax.legend(frameon=False, labelcolor="#B4BBC9", fontsize=7.5, loc="upper right")
+    _style_dark_ax(ax)
+    plt.tight_layout()
+    return fig
+
+
+def plot_monthly_avg(df):
+    month_names = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+                   7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"}
+    monthly = df.groupby("month")["aqi"].mean().sort_index()
+    labels = [month_names.get(m, str(m)) for m in monthly.index]
+    fig, ax = plt.subplots(figsize=(6.6, 3.1))
+    fig.patch.set_facecolor("#0A0C10")
+    ax.bar(labels, monthly.values, color="#A78BFA")
+    ax.set_xlabel("Month", color="#7B8395", fontsize=9)
+    ax.set_ylabel("Average AQI", color="#7B8395", fontsize=9)
+    _style_dark_ax(ax)
+    plt.tight_layout()
+    return fig
+
+
+def plot_correlation_heatmap_dark(df):
+    numeric_cols = df.select_dtypes("number").columns
+    corr = df[numeric_cols].corr()
+    fig, ax = plt.subplots(figsize=(6.8, 5.8))
+    fig.patch.set_facecolor("#0A0C10")
+    ax.set_facecolor("#0A0C10")
+    try:
+        import seaborn as sns
+        sns.heatmap(
+            corr, cmap="coolwarm", center=0, ax=ax, cbar_kws={"shrink": 0.7},
+            linewidths=0.4, linecolor="#0A0C10", annot=False,
+        )
+        cbar = ax.collections[0].colorbar
+        cbar.ax.yaxis.set_tick_params(color="#7B8395", labelsize=7)
+        plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="#B4BBC9")
+    except ImportError:
+        im = ax.imshow(corr, cmap="coolwarm", vmin=-1, vmax=1)
+        ax.set_xticks(range(len(corr.columns))); ax.set_xticklabels(corr.columns, rotation=90)
+        ax.set_yticks(range(len(corr.columns))); ax.set_yticklabels(corr.columns)
+        fig.colorbar(im, ax=ax, shrink=0.7)
+    ax.tick_params(colors="#7B8395", labelsize=7)
+    for lab in ax.get_xticklabels() + ax.get_yticklabels():
+        lab.set_color("#B4BBC9")
+    plt.tight_layout()
+    return fig
+
+
 try:
     pollution, weather, combined_df, weather_ok = fetch_current_data()
     hist_lookback_df = fetch_recent_actuals_from_feature_store(lookback_hours=72)
@@ -473,264 +612,336 @@ try:
     <p class='strapline'>Live pollutant readings, hourly trend and a 72-hour forecast for {LAT:.2f}°N, {LON:.2f}°E.</p>
     """)
 
-    # ===== HERO CARD =====
-    if weather_ok:
-        stats_html = f"""
-        <div class='stat-item'><span class='stat-label'>Temperature</span><span class='stat-val'>{weather['temperature_2m']:.1f}<span class='stat-unit'>°C</span></span></div>
-        <div class='stat-item'><span class='stat-label'>Humidity</span><span class='stat-val'>{weather['relative_humidity_2m']:.0f}<span class='stat-unit'>%</span></span></div>
-        <div class='stat-item'><span class='stat-label'>Wind</span><span class='stat-val'>{weather['wind_speed_10m']:.1f}<span class='stat-unit'>km/h</span></span></div>
-        <div class='stat-item'><span class='stat-label'>Pressure</span><span class='stat-val'>{weather['surface_pressure']:.0f}<span class='stat-unit'>hPa</span></span></div>
-        """
-    else:
-        stats_html = "<span class='weather-note'>Weather data<br>temporarily unavailable</span>"
+    tab_live, tab_insights = st.tabs(["Live station", "Historical insights"])
 
-    st.html(f"""
-    <div class='hero-card' style='--hc-color:{color}'>
-        <div class='hero-left'>
-            <div class='hero-num-row'>
-                <span class='hero-num' style='color:{color}'>{current_aqi:.0f}</span>
-                <span class='hero-cat'>{cat}</span>
+    # =========================================================================
+    # TAB 1 — LIVE STATION (current conditions, trend, forecast, SHAP)
+    # =========================================================================
+    with tab_live:
+        # ===== HERO CARD =====
+        if weather_ok:
+            stats_html = f"""
+            <div class='stat-item'><span class='stat-label'>Temperature</span><span class='stat-val'>{weather['temperature_2m']:.1f}<span class='stat-unit'>°C</span></span></div>
+            <div class='stat-item'><span class='stat-label'>Humidity</span><span class='stat-val'>{weather['relative_humidity_2m']:.0f}<span class='stat-unit'>%</span></span></div>
+            <div class='stat-item'><span class='stat-label'>Wind</span><span class='stat-val'>{weather['wind_speed_10m']:.1f}<span class='stat-unit'>km/h</span></span></div>
+            <div class='stat-item'><span class='stat-label'>Pressure</span><span class='stat-val'>{weather['surface_pressure']:.0f}<span class='stat-unit'>hPa</span></span></div>
+            """
+        else:
+            stats_html = "<span class='weather-note'>Weather data<br>temporarily unavailable</span>"
+
+        st.html(f"""
+        <div class='hero-card' style='--hc-color:{color}'>
+            <div class='hero-left'>
+                <div class='hero-num-row'>
+                    <span class='hero-num' style='color:{color}'>{current_aqi:.0f}</span>
+                    <span class='hero-cat'>{cat}</span>
+                </div>
+                <span class='hero-desc'>{cat_desc} · dominant pollutant {dominant.upper()}</span>
+                {build_aqi_scale_html(current_aqi)}
             </div>
-            <span class='hero-desc'>{cat_desc} · dominant pollutant {dominant.upper()}</span>
-            {build_aqi_scale_html(current_aqi)}
+            <div class='hero-stats'>{stats_html}</div>
         </div>
-        <div class='hero-stats'>{stats_html}</div>
-    </div>
-    """)
+        """)
 
-    # ===== POLLUTANT LEVELS =====
-    st.html("<div class='section-head'><h3 class='section-title'>Pollutant levels</h3></div>")
-    show_p = {k: v for k, v in pollution.items() if k not in ["no", "nh3"]}
-    threshold = {"pm2_5": 75, "pm10": 150, "no2": 100, "so2": 75, "o3": 70, "co": 10000}
-    names = {"pm2_5": "PM2.5", "pm10": "PM10", "no2": "NO₂", "so2": "SO₂", "o3": "O₃", "co": "CO"}
-    cells = "<div class='gauge-grid'>"
-    for p, val in show_p.items():
-        pct = min(val / threshold.get(p, 100) * 100, 100)
-        status = "Low" if pct < 40 else "Moderate" if pct < 70 else "High"
-        gcolor = "#34D399" if pct < 40 else "#FBBF24" if pct < 70 else "#F87171"
-        cells += f"""
-        <div class='gauge-cell'>
-            <div class='gauge-ring' style='background:conic-gradient({gcolor} {pct:.0f}%, var(--panel-2) {pct:.0f}% 100%)'>
-                <div class='gauge-ring-inner'><span class='gauge-val' style='color:{gcolor}'>{val:.0f}</span></div>
-            </div>
-            <span class='gauge-name'>{names.get(p, p.upper())}</span>
-            <span class='gauge-status' style='color:{gcolor}'>{status}</span>
-        </div>"""
-    cells += "</div>"
-    st.html(cells)
+        # ===== POLLUTANT LEVELS =====
+        st.html("<div class='section-head'><h3 class='section-title'>Pollutant levels</h3></div>")
+        show_p = {k: v for k, v in pollution.items() if k not in ["no", "nh3"]}
+        threshold = {"pm2_5": 75, "pm10": 150, "no2": 100, "so2": 75, "o3": 70, "co": 10000}
+        names = {"pm2_5": "PM2.5", "pm10": "PM10", "no2": "NO₂", "so2": "SO₂", "o3": "O₃", "co": "CO"}
+        cells = "<div class='gauge-grid'>"
+        for p, val in show_p.items():
+            pct = min(val / threshold.get(p, 100) * 100, 100)
+            status = "Low" if pct < 40 else "Moderate" if pct < 70 else "High"
+            gcolor = "#34D399" if pct < 40 else "#FBBF24" if pct < 70 else "#F87171"
+            cells += f"""
+            <div class='gauge-cell'>
+                <div class='gauge-ring' style='background:conic-gradient({gcolor} {pct:.0f}%, var(--panel-2) {pct:.0f}% 100%)'>
+                    <div class='gauge-ring-inner'><span class='gauge-val' style='color:{gcolor}'>{val:.0f}</span></div>
+                </div>
+                <span class='gauge-name'>{names.get(p, p.upper())}</span>
+                <span class='gauge-status' style='color:{gcolor}'>{status}</span>
+            </div>"""
+        cells += "</div>"
+        st.html(cells)
 
-    # ===== TODAY'S TREND =====
-    st.html(f"""
-    <div class='section-head'>
-        <h3 class='section-title'>AQI trend · {now_karachi.strftime('%d %b')}</h3>
-        <span class='section-note'>Measured / predicted</span>
-    </div>""")
-    try:
-        if not hist_df.empty:
-            hist_df = hist_df.copy().sort_values("datetime")
-        today_end = now_karachi.replace(hour=23, minute=59, second=59, microsecond=0)
-        future_times, future_preds = [], []
-        if not combined_df.empty:
-            ft_df = combined_df[(combined_df["datetime"] > now_karachi) & (combined_df["datetime"] <= today_end)].sort_values("datetime")
-            if not ft_df.empty:
-                future_times, future_preds = build_forecast(ft_df, hist_lookback_df, current_aqi, pollution, feature_cols, model, scaler, hours=len(ft_df))
-        if hist_df.empty and not future_times:
-            if not weather_ok:
-                st.info("Trend unavailable — Open-Meteo weather service is temporarily down.")
-            else:
-                st.warning("No trend data available yet.")
-        else:
-            fig, ax = plt.subplots(figsize=(10, 2.8))
-            fig.patch.set_facecolor("#0A0C10")
-            ax.set_facecolor("#0A0C10")
-            ds = now_karachi.replace(hour=0, minute=0, second=0, microsecond=0)
-            de = now_karachi.replace(hour=23, minute=59, second=0, microsecond=0)
-            ax.fill_between([ds, de], 0, 50, alpha=0.08, color="#34D399")
-            ax.fill_between([ds, de], 50, 100, alpha=0.08, color="#FBBF24")
-            ax.fill_between([ds, de], 100, 150, alpha=0.08, color="#FB923C")
-            ax.fill_between([ds, de], 150, 200, alpha=0.08, color="#F87171")
-            all_vals = []
+        # ===== TODAY'S TREND =====
+        st.html(f"""
+        <div class='section-head'>
+            <h3 class='section-title'>AQI trend · {now_karachi.strftime('%d %b')}</h3>
+            <span class='section-note'>Measured / predicted</span>
+        </div>""")
+        try:
             if not hist_df.empty:
-                ax.plot(hist_df["datetime"], hist_df["aqi"], color=color, linewidth=1.8, label="Measured", zorder=5)
-                all_vals += hist_df["aqi"].tolist()
-            if future_times:
-                ax.plot(future_times, future_preds, color=color, linewidth=1.5, linestyle="--", alpha=0.65, label="Predicted", zorder=5)
-                all_vals += future_preds
-            ax.scatter([now_karachi], [current_aqi], color=color, s=48, zorder=6, edgecolors="#0A0C10", linewidths=1.5, label="Now")
-            ax.set_ylabel("AQI", color="#7B8395", fontsize=9)
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%I %p", tz=KARACHI_TZ))
-            ax.grid(True, axis="y", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
-            ax.grid(False, axis="x")
-            ax.tick_params(colors="#7B8395", labelsize=8)
-            for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
-            for s in ax.spines.values(): s.set_visible(False)
-            ax.legend(frameon=False, labelcolor="#B4BBC9", fontsize=8, loc="upper right")
-            if all_vals: ax.set_ylim(max(0, min(all_vals) - 10), max(all_vals) + 10)
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.close(fig)
-    except Exception as e:
-        st.warning(f"Trend: {e}")
-
-    # ===== 3-DAY FORECAST =====
-    st.html("""
-    <div class='section-head'>
-        <h3 class='section-title'>3-day forecast</h3>
-        <span class='section-note'>Hourly prediction, next 72h</span>
-    </div>""")
-    try:
-        if combined_df.empty:
-            if not weather_ok:
-                st.info("Forecast unavailable — Open-Meteo weather service is temporarily down. Current AQI and pollutant levels are still live.")
+                hist_df = hist_df.copy().sort_values("datetime")
+            today_end = now_karachi.replace(hour=23, minute=59, second=59, microsecond=0)
+            future_times, future_preds = [], []
+            if not combined_df.empty:
+                ft_df = combined_df[(combined_df["datetime"] > now_karachi) & (combined_df["datetime"] <= today_end)].sort_values("datetime")
+                if not ft_df.empty:
+                    future_times, future_preds = build_forecast(ft_df, hist_lookback_df, current_aqi, pollution, feature_cols, model, scaler, hours=len(ft_df))
+            if hist_df.empty and not future_times:
+                if not weather_ok:
+                    st.info("Trend unavailable — Open-Meteo weather service is temporarily down.")
+                else:
+                    st.warning("No trend data available yet.")
             else:
-                st.warning("Forecast unavailable.")
-        else:
-            future_df = combined_df[combined_df["datetime"] > now_karachi].sort_values("datetime")
-            times, forecast_aqi = build_forecast(future_df, hist_lookback_df, current_aqi, pollution, feature_cols, model, scaler, hours=72)
-            if not times:
-                st.warning("Not enough forecast data.")
-            else:
-                fdf = pd.DataFrame({"datetime": times, "aqi": forecast_aqi})
-                fdf["date"] = fdf["datetime"].apply(lambda d: d.date())
-                unique_dates = sorted(fdf["date"].unique())[:3]
-                day_cols_html = "<div class='day-row'>"
-                for day in unique_dates:
-                    dv = fdf.loc[fdf["date"] == day, "aqi"]
-                    da, dmi, dmx = dv.mean(), dv.min(), dv.max()
-                    dc, _, dcol, _ = aqi_info(da)
-                    dl = pd.Timestamp(day).strftime("%d %b · %a")
-                    day_cols_html += f"""
-                    <div class='day-col'>
-                        <p class='d-label'>{dl}</p>
-                        <p class='d-val' style='color:{dcol}'>{da:.0f}</p>
-                        <p class='d-cat' style='color:{dcol}'>{dc}</p>
-                        <p class='d-range'>{dmi:.0f}–{dmx:.0f}</p>
-                    </div>"""
-                day_cols_html += "</div>"
-                st.html(day_cols_html)
-
-                fig, ax = plt.subplots(figsize=(10, 1.9))
+                fig, ax = plt.subplots(figsize=(10, 2.8))
                 fig.patch.set_facecolor("#0A0C10")
                 ax.set_facecolor("#0A0C10")
-                ax.plot(fdf["datetime"], fdf["aqi"], color=color, linewidth=1.4)
-                ax.fill_between(fdf["datetime"], fdf["aqi"] - 3, fdf["aqi"] + 3, alpha=0.10, color=color)
-                ax.axhline(100, color="#FBBF24", linestyle="--", alpha=0.4, linewidth=0.6)
-                ax.axhline(150, color="#FB923C", linestyle="--", alpha=0.4, linewidth=0.6)
+                ds = now_karachi.replace(hour=0, minute=0, second=0, microsecond=0)
+                de = now_karachi.replace(hour=23, minute=59, second=0, microsecond=0)
+                ax.fill_between([ds, de], 0, 50, alpha=0.08, color="#34D399")
+                ax.fill_between([ds, de], 50, 100, alpha=0.08, color="#FBBF24")
+                ax.fill_between([ds, de], 100, 150, alpha=0.08, color="#FB923C")
+                ax.fill_between([ds, de], 150, 200, alpha=0.08, color="#F87171")
+                all_vals = []
+                if not hist_df.empty:
+                    ax.plot(hist_df["datetime"], hist_df["aqi"], color=color, linewidth=1.8, label="Measured", zorder=5)
+                    all_vals += hist_df["aqi"].tolist()
+                if future_times:
+                    ax.plot(future_times, future_preds, color=color, linewidth=1.5, linestyle="--", alpha=0.65, label="Predicted", zorder=5)
+                    all_vals += future_preds
+                ax.scatter([now_karachi], [current_aqi], color=color, s=48, zorder=6, edgecolors="#0A0C10", linewidths=1.5, label="Now")
                 ax.set_ylabel("AQI", color="#7B8395", fontsize=9)
-                ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d", tz=KARACHI_TZ))
+                ax.xaxis.set_major_formatter(mdates.DateFormatter("%I %p", tz=KARACHI_TZ))
                 ax.grid(True, axis="y", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
                 ax.grid(False, axis="x")
-                ax.tick_params(colors="#7B8395", labelsize=7)
+                ax.tick_params(colors="#7B8395", labelsize=8)
                 for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
                 for s in ax.spines.values(): s.set_visible(False)
+                ax.legend(frameon=False, labelcolor="#B4BBC9", fontsize=8, loc="upper right")
+                if all_vals: ax.set_ylim(max(0, min(all_vals) - 10), max(all_vals) + 10)
                 plt.tight_layout()
                 st.pyplot(fig)
                 plt.close(fig)
+        except Exception as e:
+            st.warning(f"Trend: {e}")
 
-                if any(a > 150 for a in forecast_aqi):
-                    gc, gt, gb = "#F87171", "Hazardous AQI expected", "Avoid outdoor activity."
-                elif any(a > 100 for a in forecast_aqi):
-                    gc, gt, gb = "#FBBF24", "Elevated AQI expected", "Sensitive groups should limit outdoor time."
+        # ===== 3-DAY FORECAST =====
+        st.html("""
+        <div class='section-head'>
+            <h3 class='section-title'>3-day forecast</h3>
+            <span class='section-note'>Hourly prediction, next 72h</span>
+        </div>""")
+        try:
+            if combined_df.empty:
+                if not weather_ok:
+                    st.info("Forecast unavailable — Open-Meteo weather service is temporarily down. Current AQI and pollutant levels are still live.")
                 else:
-                    gc, gt, gb = "#34D399", "Within safe range", "No elevated AQI expected."
-                st.html(f"""<div class='guidance' style='--gl-color:{gc}; margin-top:14px;'><span class='g-bar'></span><div><p class='g-title'>{gt}</p><p class='g-body'>{gb}</p></div></div>""")
-    except Exception as e:
-        st.error(f"Forecast: {e}")
-
-    # ===== SHAP EXPLAINABILITY =====
-    st.html("""
-    <div class='section-head'>
-        <h3 class='section-title'>Why this forecast</h3>
-        <span class='section-note'>SHAP feature contributions</span>
-    </div>""")
-    try:
-        is_lstm = "LSTM" in type(model).__name__ or type(model).__name__ == "Sequential"
-        min_rows_needed = SHAP_TIMESTEPS + 2 if is_lstm else 1
-        if hist_lookback_df is None or hist_lookback_df.empty:
-            if not _has_hw:
-                st.info("Explainability needs the Hopsworks feature store, but HOPSWORKS_API_KEY isn't set for this app.")
+                    st.warning("Forecast unavailable.")
             else:
-                st.info("Explainability needs recent feature-store data — the read from Hopsworks came back empty (check the app logs for the underlying error).")
-        elif not all(c in hist_lookback_df.columns for c in feature_cols):
-            missing = [c for c in feature_cols if c not in hist_lookback_df.columns]
-            st.info(f"Explainability skipped — the feature store is missing columns the model expects: {', '.join(missing)}.")
-        else:
-            hist_sorted = hist_lookback_df.sort_values("datetime")
-            feat_hist = hist_sorted[feature_cols].dropna()
-            if len(feat_hist) < min_rows_needed:
-                st.info(f"Not enough recent history yet to explain this forecast — got {len(feat_hist)} complete rows, need at least {min_rows_needed} ({model_source}).")
-            else:
-                feature_names, shap_values = None, None
-
-                if is_lstm:
-                    scaled_all = scaler.transform(feat_hist[feature_cols])
-                    windows = np.array([
-                        scaled_all[i:i + SHAP_TIMESTEPS]
-                        for i in range(len(scaled_all) - SHAP_TIMESTEPS + 1)
-                    ])
-                    X_latest_seq = windows[-1:]
-                    bg_windows = windows[:-1]
-                    bg_sample = bg_windows[np.random.default_rng(42).choice(
-                        len(bg_windows), size=min(10, len(bg_windows)), replace=False
-                    )]
-
-                    explainer, kind = build_shap_explainer(model, bg_sample)
-                    sv = explainer.shap_values(X_latest_seq)
-                    sv = np.array(sv)  # shape ~ (1, 1, timesteps, features) or (1, timesteps, features)
-                    sv = sv.reshape(-1, SHAP_TIMESTEPS, len(feature_cols))
-                    # Sum contributions across the 24-hour window to get one
-                    # value per feature (total influence, not per-hour detail).
-                    per_feature = sv[0].sum(axis=0)
-                    feature_names, shap_values = feature_cols, per_feature
+                future_df = combined_df[combined_df["datetime"] > now_karachi].sort_values("datetime")
+                times, forecast_aqi = build_forecast(future_df, hist_lookback_df, current_aqi, pollution, feature_cols, model, scaler, hours=72)
+                if not times:
+                    st.warning("Not enough forecast data.")
                 else:
-                    bg_sample = feat_hist.sample(min(50, len(feat_hist)), random_state=42)
-                    bg_scaled = scaler.transform(bg_sample[feature_cols])
-                    latest_row = feat_hist.iloc[[-1]]
-                    X_latest_scaled = scaler.transform(latest_row[feature_cols])
+                    fdf = pd.DataFrame({"datetime": times, "aqi": forecast_aqi})
+                    fdf["date"] = fdf["datetime"].apply(lambda d: d.date())
+                    unique_dates = sorted(fdf["date"].unique())[:3]
+                    day_cols_html = "<div class='day-row'>"
+                    for day in unique_dates:
+                        dv = fdf.loc[fdf["date"] == day, "aqi"]
+                        da, dmi, dmx = dv.mean(), dv.min(), dv.max()
+                        dc, _, dcol, _ = aqi_info(da)
+                        dl = pd.Timestamp(day).strftime("%d %b · %a")
+                        day_cols_html += f"""
+                        <div class='day-col'>
+                            <p class='d-label'>{dl}</p>
+                            <p class='d-val' style='color:{dcol}'>{da:.0f}</p>
+                            <p class='d-cat' style='color:{dcol}'>{dc}</p>
+                            <p class='d-range'>{dmi:.0f}–{dmx:.0f}</p>
+                        </div>"""
+                    day_cols_html += "</div>"
+                    st.html(day_cols_html)
 
-                    explainer, kind = build_shap_explainer(model, bg_scaled)
-                    sv = explainer.shap_values(X_latest_scaled)
-                    feature_names, shap_values = feature_cols, np.array(sv).flatten()
+                    fig, ax = plt.subplots(figsize=(10, 1.9))
+                    fig.patch.set_facecolor("#0A0C10")
+                    ax.set_facecolor("#0A0C10")
+                    ax.plot(fdf["datetime"], fdf["aqi"], color=color, linewidth=1.4)
+                    ax.fill_between(fdf["datetime"], fdf["aqi"] - 3, fdf["aqi"] + 3, alpha=0.10, color=color)
+                    ax.axhline(100, color="#FBBF24", linestyle="--", alpha=0.4, linewidth=0.6)
+                    ax.axhline(150, color="#FB923C", linestyle="--", alpha=0.4, linewidth=0.6)
+                    ax.set_ylabel("AQI", color="#7B8395", fontsize=9)
+                    ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d", tz=KARACHI_TZ))
+                    ax.grid(True, axis="y", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
+                    ax.grid(False, axis="x")
+                    ax.tick_params(colors="#7B8395", labelsize=7)
+                    for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
+                    for s in ax.spines.values(): s.set_visible(False)
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    plt.close(fig)
 
-                shap_df = pd.DataFrame({"feature": feature_names, "shap": shap_values})
-                shap_df["abs_shap"] = shap_df["shap"].abs()
-                shap_df = shap_df.sort_values("abs_shap", ascending=True).tail(8)
+                    if any(a > 150 for a in forecast_aqi):
+                        gc, gt, gb = "#F87171", "Hazardous AQI expected", "Avoid outdoor activity."
+                    elif any(a > 100 for a in forecast_aqi):
+                        gc, gt, gb = "#FBBF24", "Elevated AQI expected", "Sensitive groups should limit outdoor time."
+                    else:
+                        gc, gt, gb = "#34D399", "Within safe range", "No elevated AQI expected."
+                    st.html(f"""<div class='guidance' style='--gl-color:{gc}; margin-top:14px;'><span class='g-bar'></span><div><p class='g-title'>{gt}</p><p class='g-body'>{gb}</p></div></div>""")
+        except Exception as e:
+            st.error(f"Forecast: {e}")
 
-                fig, ax = plt.subplots(figsize=(10, max(2.2, 0.32 * len(shap_df))))
-                fig.patch.set_facecolor("#0A0C10")
-                ax.set_facecolor("#0A0C10")
-                bar_colors = ["#F87171" if v > 0 else "#34D399" for v in shap_df["shap"]]
-                ax.barh(shap_df["feature"], shap_df["shap"], color=bar_colors, height=0.6)
-                ax.axvline(0, color="#4E5563", linewidth=0.8)
-                ax.set_xlabel("Impact on predicted AQI (SHAP value)", color="#7B8395", fontsize=9)
-                ax.tick_params(colors="#7B8395", labelsize=9)
-                for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
-                for s in ax.spines.values(): s.set_visible(False)
-                ax.grid(True, axis="x", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
-                plt.tight_layout()
-                st.pyplot(fig)
-                plt.close(fig)
-                note = "Red pushes the forecast up, green pulls it down."
-                if is_lstm:
-                    note += " Summed across the model's 24-hour input window."
-                st.html(f"<p class='section-note'>{note}</p>")
-    except Exception as e:
-        st.error(f"Explainability: {e}")
+        # ===== SHAP EXPLAINABILITY =====
+        st.html("""
+        <div class='section-head'>
+            <h3 class='section-title'>Why this forecast</h3>
+            <span class='section-note'>SHAP feature contributions</span>
+        </div>""")
+        try:
+            is_lstm = "LSTM" in type(model).__name__ or type(model).__name__ == "Sequential"
+            min_rows_needed = SHAP_TIMESTEPS + 2 if is_lstm else 1
+            if hist_lookback_df is None or hist_lookback_df.empty:
+                if not _has_hw:
+                    st.info("Explainability needs the Hopsworks feature store, but HOPSWORKS_API_KEY isn't set for this app.")
+                else:
+                    st.info("Explainability needs recent feature-store data — the read from Hopsworks came back empty (check the app logs for the underlying error).")
+            elif not all(c in hist_lookback_df.columns for c in feature_cols):
+                missing = [c for c in feature_cols if c not in hist_lookback_df.columns]
+                st.info(f"Explainability skipped — the feature store is missing columns the model expects: {', '.join(missing)}.")
+            else:
+                hist_sorted = hist_lookback_df.sort_values("datetime")
+                feat_hist = hist_sorted[feature_cols].dropna()
+                if len(feat_hist) < min_rows_needed:
+                    st.info(f"Not enough recent history yet to explain this forecast — got {len(feat_hist)} complete rows, need at least {min_rows_needed} ({model_source}).")
+                else:
+                    feature_names, shap_values = None, None
 
-    # ===== GUIDANCE =====
-    tips = {
-        "Good": ("Excellent air quality — perfect for outdoor activity.", "#34D399"),
-        "Moderate": ("Acceptable. Sensitive people should limit prolonged exertion.", "#FBBF24"),
-        "Sensitive Groups": ("Sensitive groups should reduce outdoor activity.", "#FB923C"),
-        "Unhealthy": ("Reduce outdoor physical activity for everyone.", "#F87171"),
-        "Very Unhealthy": ("Avoid outdoors — use air purifiers indoors.", "#A78BFA"),
-        "Hazardous": ("Emergency. Stay indoors, seek medical help if needed.", "#EF4444"),
-    }
-    tb, tc = tips.get(cat, ("", color))
-    st.html(f"""
-    <div class='section-head'><h3 class='section-title'>Health guidance</h3></div>
-    <div class='guidance' style='--gl-color:{tc}'><span class='g-bar'></span><div><p class='g-title'>{cat}</p><p class='g-body'>{tb}</p></div></div>
-    """)
+                    if is_lstm:
+                        scaled_all = scaler.transform(feat_hist[feature_cols])
+                        windows = np.array([
+                            scaled_all[i:i + SHAP_TIMESTEPS]
+                            for i in range(len(scaled_all) - SHAP_TIMESTEPS + 1)
+                        ])
+                        X_latest_seq = windows[-1:]
+                        bg_windows = windows[:-1]
+                        bg_sample = bg_windows[np.random.default_rng(42).choice(
+                            len(bg_windows), size=min(10, len(bg_windows)), replace=False
+                        )]
+
+                        explainer, kind = build_shap_explainer(model, bg_sample)
+                        sv = explainer.shap_values(X_latest_seq)
+                        sv = np.array(sv)  # shape ~ (1, 1, timesteps, features) or (1, timesteps, features)
+                        sv = sv.reshape(-1, SHAP_TIMESTEPS, len(feature_cols))
+                        # Sum contributions across the 24-hour window to get one
+                        # value per feature (total influence, not per-hour detail).
+                        per_feature = sv[0].sum(axis=0)
+                        feature_names, shap_values = feature_cols, per_feature
+                    else:
+                        bg_sample = feat_hist.sample(min(50, len(feat_hist)), random_state=42)
+                        bg_scaled = scaler.transform(bg_sample[feature_cols])
+                        latest_row = feat_hist.iloc[[-1]]
+                        X_latest_scaled = scaler.transform(latest_row[feature_cols])
+
+                        explainer, kind = build_shap_explainer(model, bg_scaled)
+                        sv = explainer.shap_values(X_latest_scaled)
+                        feature_names, shap_values = feature_cols, np.array(sv).flatten()
+
+                    shap_df = pd.DataFrame({"feature": feature_names, "shap": shap_values})
+                    shap_df["abs_shap"] = shap_df["shap"].abs()
+                    shap_df = shap_df.sort_values("abs_shap", ascending=True).tail(8)
+
+                    fig, ax = plt.subplots(figsize=(10, max(2.2, 0.32 * len(shap_df))))
+                    fig.patch.set_facecolor("#0A0C10")
+                    ax.set_facecolor("#0A0C10")
+                    bar_colors = ["#F87171" if v > 0 else "#34D399" for v in shap_df["shap"]]
+                    ax.barh(shap_df["feature"], shap_df["shap"], color=bar_colors, height=0.6)
+                    ax.axvline(0, color="#4E5563", linewidth=0.8)
+                    ax.set_xlabel("Impact on predicted AQI (SHAP value)", color="#7B8395", fontsize=9)
+                    ax.tick_params(colors="#7B8395", labelsize=9)
+                    for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
+                    for s in ax.spines.values(): s.set_visible(False)
+                    ax.grid(True, axis="x", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    plt.close(fig)
+                    note = "Red pushes the forecast up, green pulls it down."
+                    if is_lstm:
+                        note += " Summed across the model's 24-hour input window."
+                    st.html(f"<p class='section-note'>{note}</p>")
+        except Exception as e:
+            st.error(f"Explainability: {e}")
+
+        # ===== GUIDANCE =====
+        tips = {
+            "Good": ("Excellent air quality — perfect for outdoor activity.", "#34D399"),
+            "Moderate": ("Acceptable. Sensitive people should limit prolonged exertion.", "#FBBF24"),
+            "Sensitive Groups": ("Sensitive groups should reduce outdoor activity.", "#FB923C"),
+            "Unhealthy": ("Reduce outdoor physical activity for everyone.", "#F87171"),
+            "Very Unhealthy": ("Avoid outdoors — use air purifiers indoors.", "#A78BFA"),
+            "Hazardous": ("Emergency. Stay indoors, seek medical help if needed.", "#EF4444"),
+        }
+        tb, tc = tips.get(cat, ("", color))
+        st.html(f"""
+        <div class='section-head'><h3 class='section-title'>Health guidance</h3></div>
+        <div class='guidance' style='--gl-color:{tc}'><span class='g-bar'></span><div><p class='g-title'>{cat}</p><p class='g-body'>{tb}</p></div></div>
+        """)
+
+    # =========================================================================
+    # TAB 2 — HISTORICAL INSIGHTS (EDA, same data/plots as eda.py, inline)
+    # =========================================================================
+    with tab_insights:
+        st.html("""
+        <div class='section-head'>
+            <h3 class='section-title'>Historical insights</h3>
+            <span class='section-note'>Full feature-store history</span>
+        </div>""")
+        try:
+            full_hist_df = fetch_full_history_from_feature_store()
+            if full_hist_df is None or full_hist_df.empty:
+                if not _has_hw:
+                    st.info("Historical insights need the Hopsworks feature store, but HOPSWORKS_API_KEY isn't set for this app.")
+                else:
+                    st.info("Historical insights unavailable — the read from the feature store came back empty. Run the backfill in feature_pipeline.py first.")
+            else:
+                n_rows = len(full_hist_df)
+                span_start = full_hist_df["datetime"].min().strftime("%d %b %Y")
+                span_end = full_hist_df["datetime"].max().strftime("%d %b %Y")
+                st.html(f"<p class='insight-caption'>{n_rows:,} hourly readings · {span_start} → {span_end}</p>")
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.html("<p class='section-note'>AQI over time — Karachi</p>")
+                    st.pyplot(plot_full_aqi_timeseries(full_hist_df))
+                    plt.close("all")
+
+                    st.html("""
+                    <div class='insight-banner'>
+                        <p class='ib-title'>Monthly seasonal variation</p>
+                        <p class='ib-body'>Distribution of air quality metrics across months.</p>
+                    </div>""")
+                    if "month" in full_hist_df.columns:
+                        st.pyplot(plot_monthly_avg(full_hist_df))
+                        plt.close("all")
+                    else:
+                        st.info("`month` column not found in the feature store — skipping seasonal chart.")
+
+                with col2:
+                    st.html("<p class='section-note'>Average AQI by hour of day — Karachi</p>")
+                    if "hour" in full_hist_df.columns:
+                        st.pyplot(plot_hourly_avg(full_hist_df))
+                        plt.close("all")
+                    else:
+                        st.info("`hour` column not found in the feature store — skipping hourly chart.")
+
+                    st.html("""
+                    <div class='insight-banner'>
+                        <p class='ib-title'>Feature correlation matrix</p>
+                        <p class='ib-body'>Linear correlation heatmap between target AQI and key pollutants.</p>
+                    </div>""")
+                    st.pyplot(plot_correlation_heatmap_dark(full_hist_df))
+                    plt.close("all")
+
+                with st.expander("Summary statistics"):
+                    st.dataframe(full_hist_df.describe(include="all").T, use_container_width=True)
+                    na_counts = full_hist_df.isna().sum().sort_values(ascending=False)
+                    na_counts = na_counts[na_counts > 0]
+                    if not na_counts.empty:
+                        st.html("<p class='section-note' style='margin-top:10px;'>Missing values</p>")
+                        st.dataframe(na_counts.rename("missing").to_frame(), use_container_width=True)
+        except Exception as e:
+            st.error(f"Historical insights: {e}")
 
 except Exception as e:
     st.error(f"Error: {e}")
