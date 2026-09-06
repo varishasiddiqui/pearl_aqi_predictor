@@ -14,9 +14,7 @@ OPENWEATHER_API_KEY = os.environ["OPENWEATHER_API_KEY"]
 HOPSWORKS_API_KEY = os.environ["HOPSWORKS_API_KEY"]
 
 FEATURE_GROUP_NAME = "aqi_features_karachi"
-# v2 adds aqi_change_rate / pm25_change_rate. Bumped (not overwritten in place)
-# so the existing v1 feature group and any models already registered against
-# it keep working untouched — v2 just starts collecting fresh, in parallel.
+
 FEATURE_GROUP_VERSION = 2
 
 BREAKPOINTS = {
@@ -149,16 +147,10 @@ def build_features(days):
     merged_df["aqi_rolling_24"] = merged_df["aqi"].rolling(24).mean()
     merged_df["pm25_rolling_24"] = merged_df["pm2_5"].rolling(24).mean()
 
-    # target: AQI 24 hours ahead of each row (only needed for training,
-    # harmless to compute here too — rows with a NaN target are still valid
-    # feature rows for hourly ingestion, just not usable for training yet)
     merged_df["target_aqi_24hr"] = merged_df["aqi"].shift(-24)
 
     before = len(merged_df)
-    # Only drop rows missing the LAG/ROLLING inputs (needed for prediction).
-    # We do NOT drop rows for a missing target here, since the most recent
-    # ~24 hours legitimately won't have a target yet — that's expected for
-    # an hourly ingestion run, not a bug.
+
     feature_input_cols = [
         "aqi_lag_1", "aqi_lag_3", "aqi_lag_24", "pm25_lag_1", "pm25_lag_24",
         "aqi_change_rate", "pm25_change_rate",
@@ -171,14 +163,7 @@ def build_features(days):
 
 
 def align_dtypes_to_schema(df, feature_group):
-    """Cast df columns to whatever type the EXISTING feature group schema
-    actually expects, instead of guessing. This is what caused the back-and-forth
-    bugs: OpenWeather/Open-Meteo readings can come back as either whole numbers
-    or decimals depending on the hour, so pandas' inferred dtype (int64 vs
-    float64) varies run to run and randomly mismatches whatever type the
-    feature group locked in on its very first insert. Reading the schema at
-    runtime and casting to match it means this class of bug can't recur,
-    regardless of which column or which direction (int<->float) it hits."""
+
     type_map = {
         "bigint": "int64", "int": "int32", "smallint": "int16", "tinyint": "int8",
         "double": "float64", "float": "float32",
@@ -203,13 +188,7 @@ def align_dtypes_to_schema(df, feature_group):
 
 
 def _extract_real_errors(log_text, max_chars=5000):
-    """Filter out known-benign Spark shutdown/metrics noise and surface the
-    actual failure. The Prometheus-pushgateway SocketTimeoutException seen
-    during executor teardown is a documented cosmetic bug in Spark's
-    banzaicloud metrics sink (it fires even on a clean, successful shutdown)
-    — it is not itself a failure cause, so a plain tail of the log tends to
-    show this noise instead of the real error, which is usually earlier in
-    a large log."""
+
     noise_markers = (
         "PrometheusSink", "pushgateway", "PushGateway.java", "ScheduledReporter",
         "CoarseGrainedExecutorBackend-stop-executor", "MetricsSystem.scala",
@@ -242,10 +221,7 @@ def push_to_hopsworks(df):
         description="Hourly AQI + engineered lag/rolling features for Karachi",
         primary_key=["datetime"],
         event_time="datetime",
-        time_travel_format="HUDI",  # explicit — Colab/CI envs often auto-install
-                                     # `deltalake`, which silently flips the
-                                     # default to DELTA and breaks the plain
-                                     # Python client. Force HUDI.
+        time_travel_format="HUDI", 
     )
     df = align_dtypes_to_schema(df, feature_group)
 
@@ -253,14 +229,7 @@ def push_to_hopsworks(df):
     try:
         feature_group.insert(df, write_options={"wait_for_job": True})
     except JobExecutionException:
-        # We've seen this specific pattern: the Hudi commit itself completes
-        # (rows are visibly written — see commit_details() below), but a
-        # separate server-side metadata/RPC call afterwards times out
-        # (SocketTimeoutException / "Transaction marked for rollback"), and
-        # Hopsworks reports the whole job as FAILED even though the data
-        # already landed. Before treating this as a real failure, check
-        # whether a commit newer than when we started this insert actually
-        # exists — if so, the data is safe and this is a false alarm.
+
         print("Materialization job reported FAILED — checking if the data landed anyway...")
         try:
             commits = feature_group.commit_details()
@@ -280,9 +249,7 @@ def push_to_hopsworks(df):
         except Exception as verify_err:
             print(f"Could not verify via commit_details either: {verify_err}")
 
-        # Either verification showed no new commit, or verification itself
-        # failed — pull the job logs (noise-filtered) so the actual cause is
-        # visible directly in the GitHub Actions log.
+
         print("Fetching job logs from Hopsworks...")
         try:
             executions = feature_group.materialization_job.get_executions()
@@ -306,9 +273,7 @@ ALERT_WEBHOOK_URL = os.environ.get("ALERT_WEBHOOK_URL", "")
 
 
 def send_hazard_alert_if_needed(df):
-    """Optional hazard-AQI alert. No-op if ALERT_WEBHOOK_URL isn't set, and
-    any failure here is swallowed so it can never break the feature pipeline
-    run itself (the data has already landed in Hopsworks by this point)."""
+
     if not ALERT_WEBHOOK_URL or df.empty:
         return
     try:
@@ -334,11 +299,7 @@ AUTO_BACKFILL_DAYS = 30
 
 
 def get_existing_row_count():
-    """How many rows are already in the target feature group version. Used
-    to decide whether this run needs to self-backfill. Any failure here
-    (group doesn't exist yet, transient read issue) is treated as 0 rows —
-    the safe default, since it just triggers a backfill rather than skipping
-    one that was needed."""
+
     try:
         import hopsworks
 
@@ -372,8 +333,6 @@ def main():
                 f"{AUTO_BACKFILL_DAYS} days before settling into normal hourly runs."
             )
         else:
-            # Normal hourly runs only need a small overlapping window (covers
-            # lag/rolling windows + guards against a missed run).
             days = 3
 
     df = build_features(days)
