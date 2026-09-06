@@ -270,9 +270,9 @@ def describe_model_type(m):
 
 
 def plot_model_metrics(metrics: dict):
-    """Bar chart of whatever numeric metrics were logged for the registered
-    model version. Works with any keys — one model's own RMSE, or, if the
-    training script logs them, several candidates' scores side by side."""
+    """Fallback bar chart of whatever numeric metrics were logged, used only
+    when they don't match the '<model>_<metric>' pattern group_candidate_metrics
+    expects (e.g. an older registered version with just a flat {rmse, mae, r2})."""
     items = [(k, v) for k, v in metrics.items() if isinstance(v, (int, float))]
     if not items:
         return None
@@ -286,6 +286,52 @@ def plot_model_metrics(metrics: dict):
     for i, v in enumerate(values):
         ax.text(v, i, f"  {v:.3f}", va="center", color="#B4BBC9", fontsize=8.5)
     ax.set_xlabel("Value", color="#7B8395", fontsize=9)
+    ax.tick_params(colors="#7B8395", labelsize=9)
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.grid(True, axis="x", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
+    plt.tight_layout()
+    return fig
+
+
+# Maps training_pipeline.py's metric-key prefixes (row["Model"].lower()) to
+# a clean display label, and to the type_name describe_model_type() returns,
+# so the deployed model's bar can be highlighted in the comparison charts.
+_CANDIDATE_LABELS = {"ridge": "Ridge", "randomforest": "Random Forest", "lstm": "LSTM"}
+_TYPE_NAME_TO_PREFIX = {"Ridge Regression": "ridge", "Random Forest": "randomforest", "LSTM (sequence model)": "lstm"}
+
+
+def group_candidate_metrics(metrics: dict):
+    """Groups '<model>_<metric>' keys (e.g. 'ridge_rmse', logged by
+    training_pipeline.py's register_model()) into {metric: {model: value}}.
+    Unprefixed keys (the winner's own bare 'rmse'/'mae'/'r2') are ignored
+    here since they'd just duplicate that model's row in the grouped view."""
+    groups = {}
+    for key, val in metrics.items():
+        if not isinstance(val, (int, float)) or "_" not in key:
+            continue
+        model_part, metric_part = key.rsplit("_", 1)
+        metric_part = metric_part.lower()
+        if metric_part not in ("rmse", "mae", "r2") or model_part not in _CANDIDATE_LABELS:
+            continue
+        groups.setdefault(metric_part, {})[model_part] = val
+    return groups
+
+
+def plot_metric_comparison(metric_name, values: dict, winner_prefix=None):
+    """One metric (RMSE, MAE, or R2) compared across every candidate model,
+    with the deployed model's bar highlighted in teal — this is the 'why we
+    chose this model' chart."""
+    ordered = sorted(values.items(), key=lambda kv: kv[1], reverse=(metric_name == "r2"))
+    labels = [_CANDIDATE_LABELS.get(k, k.title()) for k, _ in ordered]
+    values_list = [v for _, v in ordered]
+    colors = ["#45D9C8" if k == winner_prefix else "#4E5563" for k, _ in ordered]
+    fig, ax = plt.subplots(figsize=(6.2, 2.0))
+    fig.patch.set_facecolor("#0A0C10")
+    ax.set_facecolor("#0A0C10")
+    ax.barh(labels, values_list, color=colors, height=0.55)
+    for i, v in enumerate(values_list):
+        ax.text(v, i, f"  {v:.3f}", va="center", color="#B4BBC9", fontsize=8.5)
     ax.tick_params(colors="#7B8395", labelsize=9)
     for s in ax.spines.values():
         s.set_visible(False)
@@ -763,22 +809,39 @@ try:
                 </div>
             </div>""")
 
-            numeric_metrics = {}
-            if model_meta and model_meta.get("metrics"):
-                numeric_metrics = {k: v for k, v in model_meta["metrics"].items() if isinstance(v, (int, float))}
+            metrics = model_meta.get("metrics", {}) if model_meta else {}
+            groups = group_candidate_metrics(metrics)
 
-            if numeric_metrics:
-                st.html("<p class='insight-label' style='margin-top:16px;'>Logged error metrics for this version</p>")
-                fig = plot_model_metrics(numeric_metrics)
-                if fig:
-                    st.pyplot(fig)
-                    plt.close(fig)
-                if len(numeric_metrics) == 1:
-                    st.html("<p class='insight-caption'>Only this model's own score was logged at registration time — Hopsworks doesn't keep the rejected candidates, so a Ridge-vs-RF-vs-LSTM comparison needs all three scores logged into <code>training_metrics</code> when the winning model is saved (e.g. <code>model.save(..., metrics={'ridge_rmse': ..., 'rf_rmse': ..., 'lstm_rmse': ...})</code>). Do that once in training_pipeline.py and this chart will show all three automatically — no app changes needed.</p>")
-                else:
-                    st.html("<p class='insight-caption'>Metrics as logged in this version's training_metrics. Lower is better for error metrics like RMSE/MAE.</p>")
+            if groups:
+                # Full Ridge/RandomForest/LSTM comparison is available —
+                # this is the "why we chose this model" view.
+                st.html("<p class='insight-label' style='margin-top:16px;'>Why this model — holdout comparison across candidates</p>")
+                winner_prefix = _TYPE_NAME_TO_PREFIX.get(type_name)
+                metric_order = ["rmse", "mae", "r2"]
+                ordered_metrics = [m for m in metric_order if m in groups] + [m for m in groups if m not in metric_order]
+                metric_captions = {"rmse": "RMSE (lower is better)", "mae": "MAE (lower is better)", "r2": "R² (higher is better)"}
+                cols = st.columns(len(ordered_metrics))
+                for col, metric_name in zip(cols, ordered_metrics):
+                    with col:
+                        st.html(f"<p class='section-note'>{metric_captions.get(metric_name, metric_name.upper())}</p>")
+                        fig = plot_metric_comparison(metric_name, groups[metric_name], winner_prefix=winner_prefix)
+                        st.pyplot(fig)
+                        plt.close(fig)
+                st.html("<p class='insight-caption'>Teal bar = deployed model. All three candidates were evaluated on the same holdout split in training_pipeline.py — this model won on R².</p>")
             else:
-                st.info("No training metrics were logged for this registered model version, so there's nothing to compare yet. Log them via `model.save(model_dir, metrics={...})` in training_pipeline.py to see them here.")
+                # Older registered version without per-candidate keys yet —
+                # fall back to whatever flat metrics exist, or explain what's
+                # needed to unlock the comparison above.
+                numeric_metrics = {k: v for k, v in metrics.items() if isinstance(v, (int, float))}
+                if numeric_metrics:
+                    st.html("<p class='insight-label' style='margin-top:16px;'>Logged metrics for this version</p>")
+                    fig = plot_model_metrics(numeric_metrics)
+                    if fig:
+                        st.pyplot(fig)
+                        plt.close(fig)
+                    st.html("<p class='insight-caption'>Only this model's own score was logged for this version — retrain and re-register with the updated training_pipeline.py to see the full Ridge/RandomForest/LSTM comparison here.</p>")
+                else:
+                    st.info("No training metrics were logged for this registered model version, so there's nothing to compare yet.")
         except Exception as e:
             st.warning(f"Model info: {e}")
 
