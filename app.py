@@ -11,12 +11,7 @@ import shap
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
 
-# 'Inter'/'Space Grotesk' are loaded via CSS for the browser, but matplotlib
-# renders server-side and doesn't have them installed — every ax label call
-# that requested fontfamily='Inter' was silently falling back to DejaVu Sans
-# anyway, just with a "findfont: Font family 'Inter' not found" warning
-# printed per element. Set the real fallback explicitly so charts still
-# look right and the logs stay clean.
+
 plt.rcParams["font.family"] = "DejaVu Sans"
 
 KARACHI_TZ = timezone(timedelta(hours=5))
@@ -230,16 +225,15 @@ def load_model():
                     model = joblib.load(os.path.join(model_dir, "best_model.pkl"))
                     scaler = joblib.load(os.path.join(model_dir, "scaler.pkl"))
                     features = joblib.load(os.path.join(model_dir, "feature_cols.pkl"))
-                    # Only the winning model gets registered — Hopsworks doesn't
-                    # keep the rejected candidates. Whatever was logged into
-                    # training_metrics at registration time (e.g. this model's
-                    # own RMSE, or, if the training script logged them, the
-                    # other candidates' scores too) is all that's available here.
+
                     raw_metrics = getattr(registry_model, "training_metrics", None) or {}
+
+                    av_pred_path = os.path.join(model_dir, "actual_vs_predicted.png")
                     model_meta = {
                         "version": registry_model.version,
                         "metrics": dict(raw_metrics),
                         "description": getattr(registry_model, "description", None),
+                        "actual_vs_predicted_path": av_pred_path if os.path.exists(av_pred_path) else None,
                     }
                     return model, scaler, features, f"Hopsworks v{registry_model.version}", model_meta
                 except Exception as version_err:
@@ -295,9 +289,6 @@ def plot_model_metrics(metrics: dict):
     return fig
 
 
-# Maps training_pipeline.py's metric-key prefixes (row["Model"].lower()) to
-# a clean display label, and to the type_name describe_model_type() returns,
-# so the deployed model's bar can be highlighted in the comparison charts.
 _CANDIDATE_LABELS = {"ridge": "Ridge", "randomforest": "Random Forest", "lstm": "LSTM"}
 _TYPE_NAME_TO_PREFIX = {"Ridge Regression": "ridge", "Random Forest": "randomforest", "LSTM (sequence model)": "lstm"}
 
@@ -341,11 +332,7 @@ def plot_metric_comparison(metric_name, values: dict, winner_prefix=None):
     return fig
 
 
-# ---------------------------------------------------------------------------
-# SHAP explainability — read-only, built on top of the already-loaded model.
-# Does not touch training/prediction logic; just explains it.
-# ---------------------------------------------------------------------------
-SHAP_TIMESTEPS = 24  # matches TIMESTEPS in training_pipeline.py for the LSTM
+SHAP_TIMESTEPS = 24  #
 
 
 @st.cache_resource
@@ -476,14 +463,6 @@ def fetch_recent_actuals_from_feature_store(lookback_hours=72):
         print(traceback.format_exc())
         return pd.DataFrame()
 
-
-# ---------------------------------------------------------------------------
-# Full history for EDA / historical insights — same feature group as above,
-# but no lookback trim. This is the Streamlit-native equivalent of eda.py's
-# load_data(), used to power the "Historical insights" section below.
-# Cached longer (1h) since full-history reads are heavier and this data
-# doesn't need to be as fresh as the live/trend sections.
-# ---------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
 def fetch_full_history_from_feature_store():
     hopsworks_key = st.secrets.get("HOPSWORKS_API_KEY", "")
@@ -496,12 +475,6 @@ def fetch_full_history_from_feature_store():
         fs = project.get_feature_store()
         fg = fs.get_feature_group(name=FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
 
-        # Hopsworks' Arrow Flight query service can drop the connection on
-        # large, unfiltered reads ("Flight returned unavailable error ...
-        # Socket closed") — this is transient/server-side, not app logic.
-        # Retry a couple of times on the fast path, then fall back to the
-        # Hive/Spark-based read, which is slower but far more tolerant of
-        # big, unfiltered scans like this one.
         df, last_err = None, None
         attempts = [{}, {}, {"use_hive": True}]
         for i, read_options in enumerate(attempts, start=1):
@@ -678,12 +651,6 @@ def build_forecast(feature_df, hist_lookback_df, current_aqi, current_row, featu
         pm25_history.append(row.get("pm2_5", np.nan))
     return times, preds
 
-
-# ---------------------------------------------------------------------------
-# Presentation-only helper: builds the horizontal AQI scale bar markup for
-# the hero card. Segment thresholds mirror aqi_info() exactly. Pure
-# rendering — no AQI math, model, or data logic lives here.
-# ---------------------------------------------------------------------------
 _SCALE_SEGMENTS = [
     (0, 50, "#34D399"), (50, 100, "#FBBF24"), (100, 150, "#FB923C"),
     (150, 200, "#F87171"), (200, 300, "#A78BFA"), (300, 500, "#EF4444"),
@@ -701,12 +668,6 @@ def build_aqi_scale_html(value, scale_max=500):
         <div class='aqi-scale-labels'><span>0</span><span>150</span><span>300</span><span>500</span></div>
     </div>"""
 
-
-# ---------------------------------------------------------------------------
-# EDA / historical-insights plots — dark-themed inline equivalents of the
-# PNGs eda.py saves to disk. Same underlying computations (groupby hour /
-# month, .corr()), just rendered straight into the app instead of a file.
-# ---------------------------------------------------------------------------
 def _style_dark_ax(ax, show_x_grid=False):
     ax.set_facecolor("#0A0C10")
     ax.tick_params(colors="#7B8395", labelsize=8)
@@ -765,9 +726,6 @@ def plot_correlation_heatmap_dark(df):
     numeric_cols = df.select_dtypes("number").columns
     corr = df[numeric_cols].corr()
     n = len(corr.columns)
-    # Sized for FULL container width (not a half column) — with ~20 features
-    # a cramped half-width heatmap turns into unreadable overlapping labels,
-    # so this needs real horizontal room to stay legible.
     fig, ax = plt.subplots(figsize=(13, max(6.5, 0.4 * n)))
     fig.patch.set_facecolor("#0A0C10")
     ax.set_facecolor("#0A0C10")
@@ -815,6 +773,7 @@ try:
             <a class='credit-tag' href='https://www.linkedin.com/in/warisha-siddiqui/' target='_blank' rel='noopener noreferrer' title='Warisha Arshad on LinkedIn'>
                 <svg class='credit-icon' viewBox='0 0 24 24' fill='currentColor' xmlns='http://www.w3.org/2000/svg'><path d='M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.44-2.14 2.94v5.67H9.34V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.38-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.07 2.07 0 1 1 0-4.13 2.07 2.07 0 0 1 0 4.13zM7.13 20.45H3.56V9h3.57v11.45zM22.22 0H1.77C.8 0 0 .78 0 1.75v20.5C0 23.22.8 24 1.77 24h20.45c.98 0 1.78-.78 1.78-1.75V1.75C24 .78 23.2 0 22.22 0z'/></svg>
                 <span class='credit-label'>Warisha Arshad</span>
+                <span class='credit-label'>varishasid06@gmail.com</span>
             </a>
         </div>
     </div>
@@ -1028,8 +987,6 @@ try:
                         sv = explainer.shap_values(X_latest_seq)
                         sv = np.array(sv)  # shape ~ (1, 1, timesteps, features) or (1, timesteps, features)
                         sv = sv.reshape(-1, SHAP_TIMESTEPS, len(feature_cols))
-                        # Sum contributions across the 24-hour window to get one
-                        # value per feature (total influence, not per-hour detail).
                         per_feature = sv[0].sum(axis=0)
 
                         fig = plot_shap_bar_dark(feature_cols, per_feature)
@@ -1038,9 +995,6 @@ try:
                         st.html("<p class='section-note'>Red pushes the forecast up, green pulls it down. Summed across the model's 24-hour input window — every feature shown, this specific forecast only.</p>")
                         st.html("<p class='insight-caption'>The scattered 'beeswarm' view (many instances at once, colored by feature value) needs the gradient explainer to re-run over many 24-hour windows, which is expensive for the sequence model — so the LSTM path shows this single-forecast breakdown instead.</p>")
                     else:
-                        # A real beeswarm needs many instances, not just the
-                        # one being predicted — sample a decent chunk of
-                        # recent history so the scatter has real spread.
                         bg_sample = feat_hist.sample(min(120, len(feat_hist)), random_state=42)
                         bg_scaled = scaler.transform(bg_sample[feature_cols])
                         latest_row = feat_hist.iloc[[-1]]
@@ -1094,14 +1048,10 @@ try:
                 span_end = full_hist_df["datetime"].max().strftime("%d %b %Y")
                 st.html(f"<p class='insight-caption'>{n_rows:,} hourly readings · {span_start} → {span_end}</p>")
 
-                # Full width — a time series with months of hourly data needs
-                # real horizontal room, not a squeezed half-column.
                 st.html("<p class='section-note'>AQI over time — Karachi</p>")
                 st.pyplot(plot_full_aqi_timeseries(full_hist_df))
                 plt.close("all")
 
-                # Two columns — both are compact categorical bar charts
-                # (24 hours / 12 months), so half-width stays readable.
                 col1, col2 = st.columns(2)
                 with col1:
                     st.html("<p class='section-note'>Average AQI by hour of day</p>")
@@ -1120,9 +1070,6 @@ try:
                     else:
                         st.info("`month` column not found in the feature store — skipping seasonal chart.")
 
-                # Full width — correlation heatmap has ~20 features; it needs
-                # the whole container to stay legible (this was the squeeze
-                # that broke it before).
                 st.html("""
                 <p class='insight-label'>Feature correlation matrix</p>
                 <p class='insight-sublabel'>Linear correlation between target AQI and key pollutants/weather features.</p>""")
@@ -1163,8 +1110,6 @@ try:
             groups = group_candidate_metrics(metrics)
 
             if groups:
-                # Full Ridge/RandomForest/LSTM comparison is available —
-                # this is the "why we chose this model" view.
                 st.html("<p class='insight-label' style='margin-top:20px;'>Why this model — holdout comparison across candidates</p>")
                 winner_prefix = _TYPE_NAME_TO_PREFIX.get(type_name)
                 metric_order = ["rmse", "mae", "r2"]
@@ -1189,10 +1134,7 @@ try:
                     rows.append(row)
                 comp_df = pd.DataFrame(rows).dropna(how="all", subset=["RMSE", "MAE", "R2"])
                 st.dataframe(comp_df, use_container_width=True, hide_index=True)
-            else:
-                # Older registered version without per-candidate keys yet —
-                # fall back to whatever flat metrics exist, or explain what's
-                # needed to unlock the comparison above.
+            else:  
                 numeric_metrics = {k: v for k, v in metrics.items() if isinstance(v, (int, float))}
                 if numeric_metrics:
                     st.html("<p class='insight-label' style='margin-top:18px;'>Logged metrics for this version</p>")
@@ -1203,6 +1145,12 @@ try:
                     st.html("<p class='insight-caption'>Only this model's own score was logged for this version — retrain and re-register with the updated training_pipeline.py to see the full Ridge/RandomForest/LSTM comparison here.</p>")
                 else:
                     st.info("No training metrics were logged for this registered model version, so there's nothing to compare yet.")
+
+            av_pred_path = model_meta.get("actual_vs_predicted_path") if model_meta else None
+            if av_pred_path:
+                st.html("<p class='insight-label' style='margin-top:20px;'>Actual vs. Predicted AQI (holdout set)</p>")
+                st.image(av_pred_path, use_container_width=False)
+                st.html("<p class='insight-caption'>Points closer to the red diagonal (y = x) mean the deployed model's predictions were closer to what actually happened, on data the model never trained on.</p>")
 
             st.html("<p class='insight-label' style='margin-top:20px;'>Features used</p>")
             st.html(f"<p class='insight-sublabel' style='margin-left:13px;'>{len(feature_cols)} correlation-selected features: {', '.join(feature_cols)}</p>")
