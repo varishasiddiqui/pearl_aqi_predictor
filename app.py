@@ -738,7 +738,7 @@ try:
     <p class='strapline'>Live pollutant readings, hourly trend and a 72-hour forecast for {LAT:.2f}°N, {LON:.2f}°E.</p>
     """)
 
-    tab_live, tab_insights = st.tabs(["Live station", "Historical insights"])
+    tab_live, tab_insights, tab_model = st.tabs(["Live station", "Historical insights", "Model summary"])
 
     # =========================================================================
     # TAB 1 — LIVE STATION (current conditions, trend, forecast, SHAP)
@@ -789,61 +789,6 @@ try:
             </div>"""
         cells += "</div>"
         st.html(cells)
-
-        # ===== MODEL IN USE =====
-        st.html("""
-        <div class='section-head'>
-            <h3 class='section-title'>Model in use</h3>
-            <span class='section-note'>Registered model behind this forecast</span>
-        </div>""")
-        try:
-            type_name, _ = describe_model_type(model)
-            version_label = model_meta.get("version") if model_meta else None
-            version_str = f"Version {version_label}" if version_label is not None else model_source
-            st.html(f"""
-            <div class='guidance' style='--gl-color:#45D9C8;'>
-                <span class='g-bar'></span>
-                <div>
-                    <p class='g-title'>{type_name} · {version_str}</p>
-                    <p class='g-body'>Currently deployed model, loaded from {model_source}.</p>
-                </div>
-            </div>""")
-
-            metrics = model_meta.get("metrics", {}) if model_meta else {}
-            groups = group_candidate_metrics(metrics)
-
-            if groups:
-                # Full Ridge/RandomForest/LSTM comparison is available —
-                # this is the "why we chose this model" view.
-                st.html("<p class='insight-label' style='margin-top:16px;'>Why this model — holdout comparison across candidates</p>")
-                winner_prefix = _TYPE_NAME_TO_PREFIX.get(type_name)
-                metric_order = ["rmse", "mae", "r2"]
-                ordered_metrics = [m for m in metric_order if m in groups] + [m for m in groups if m not in metric_order]
-                metric_captions = {"rmse": "RMSE (lower is better)", "mae": "MAE (lower is better)", "r2": "R² (higher is better)"}
-                cols = st.columns(len(ordered_metrics))
-                for col, metric_name in zip(cols, ordered_metrics):
-                    with col:
-                        st.html(f"<p class='section-note'>{metric_captions.get(metric_name, metric_name.upper())}</p>")
-                        fig = plot_metric_comparison(metric_name, groups[metric_name], winner_prefix=winner_prefix)
-                        st.pyplot(fig)
-                        plt.close(fig)
-                st.html("<p class='insight-caption'>Teal bar = deployed model. All three candidates were evaluated on the same holdout split in training_pipeline.py — this model won on R².</p>")
-            else:
-                # Older registered version without per-candidate keys yet —
-                # fall back to whatever flat metrics exist, or explain what's
-                # needed to unlock the comparison above.
-                numeric_metrics = {k: v for k, v in metrics.items() if isinstance(v, (int, float))}
-                if numeric_metrics:
-                    st.html("<p class='insight-label' style='margin-top:16px;'>Logged metrics for this version</p>")
-                    fig = plot_model_metrics(numeric_metrics)
-                    if fig:
-                        st.pyplot(fig)
-                        plt.close(fig)
-                    st.html("<p class='insight-caption'>Only this model's own score was logged for this version — retrain and re-register with the updated training_pipeline.py to see the full Ridge/RandomForest/LSTM comparison here.</p>")
-                else:
-                    st.info("No training metrics were logged for this registered model version, so there's nothing to compare yet.")
-        except Exception as e:
-            st.warning(f"Model info: {e}")
 
         # ===== TODAY'S TREND =====
         st.html(f"""
@@ -1113,6 +1058,84 @@ try:
                 plt.close("all")
         except Exception as e:
             st.error(f"Historical insights: {e}")
+
+    # =========================================================================
+    # TAB 3 — MODEL SUMMARY (which model is deployed, and why it was chosen)
+    # =========================================================================
+    with tab_model:
+        st.html("""
+        <div class='section-head'>
+            <h3 class='section-title'>Model summary</h3>
+            <span class='section-note'>Registered model behind this forecast</span>
+        </div>""")
+        try:
+            type_name, _ = describe_model_type(model)
+            version_label = model_meta.get("version") if model_meta else None
+            version_str = f"Version {version_label}" if version_label is not None else model_source
+            description = (model_meta.get("description") if model_meta else None) or "No description logged for this version."
+
+            st.html(f"""
+            <div class='guidance' style='--gl-color:#45D9C8;'>
+                <span class='g-bar'></span>
+                <div>
+                    <p class='g-title'>{type_name} · {version_str}</p>
+                    <p class='g-body'>Currently deployed model, loaded from {model_source}.</p>
+                </div>
+            </div>""")
+
+            st.html(f"""
+            <p class='insight-label' style='margin-top:18px;'>Registration notes</p>
+            <p class='insight-sublabel' style='margin-left:13px; font-size:12.5px;'>{description}</p>""")
+
+            metrics = model_meta.get("metrics", {}) if model_meta else {}
+            groups = group_candidate_metrics(metrics)
+
+            if groups:
+                # Full Ridge/RandomForest/LSTM comparison is available —
+                # this is the "why we chose this model" view.
+                st.html("<p class='insight-label' style='margin-top:20px;'>Why this model — holdout comparison across candidates</p>")
+                winner_prefix = _TYPE_NAME_TO_PREFIX.get(type_name)
+                metric_order = ["rmse", "mae", "r2"]
+                ordered_metrics = [m for m in metric_order if m in groups] + [m for m in groups if m not in metric_order]
+                metric_captions = {"rmse": "RMSE (lower is better)", "mae": "MAE (lower is better)", "r2": "R² (higher is better)"}
+                cols = st.columns(len(ordered_metrics))
+                for col, metric_name in zip(cols, ordered_metrics):
+                    with col:
+                        st.html(f"<p class='section-note'>{metric_captions.get(metric_name, metric_name.upper())}</p>")
+                        fig = plot_metric_comparison(metric_name, groups[metric_name], winner_prefix=winner_prefix)
+                        st.pyplot(fig)
+                        plt.close(fig)
+                st.html("<p class='insight-caption'>Teal bar = deployed model. All three candidates were evaluated on the same holdout split in training_pipeline.py.</p>")
+
+                # Raw comparison table too, for anyone who wants exact numbers.
+                st.html("<p class='insight-label' style='margin-top:20px;'>Raw comparison table</p>")
+                rows = []
+                for prefix, label in _CANDIDATE_LABELS.items():
+                    row = {"Model": label}
+                    for m in ("rmse", "mae", "r2"):
+                        row[m.upper()] = groups.get(m, {}).get(prefix)
+                    rows.append(row)
+                comp_df = pd.DataFrame(rows).dropna(how="all", subset=["RMSE", "MAE", "R2"])
+                st.dataframe(comp_df, use_container_width=True, hide_index=True)
+            else:
+                # Older registered version without per-candidate keys yet —
+                # fall back to whatever flat metrics exist, or explain what's
+                # needed to unlock the comparison above.
+                numeric_metrics = {k: v for k, v in metrics.items() if isinstance(v, (int, float))}
+                if numeric_metrics:
+                    st.html("<p class='insight-label' style='margin-top:18px;'>Logged metrics for this version</p>")
+                    fig = plot_model_metrics(numeric_metrics)
+                    if fig:
+                        st.pyplot(fig)
+                        plt.close(fig)
+                    st.html("<p class='insight-caption'>Only this model's own score was logged for this version — retrain and re-register with the updated training_pipeline.py to see the full Ridge/RandomForest/LSTM comparison here.</p>")
+                else:
+                    st.info("No training metrics were logged for this registered model version, so there's nothing to compare yet.")
+
+            st.html("<p class='insight-label' style='margin-top:20px;'>Features used</p>")
+            st.html(f"<p class='insight-sublabel' style='margin-left:13px;'>{len(feature_cols)} correlation-selected features: {', '.join(feature_cols)}</p>")
+        except Exception as e:
+            st.warning(f"Model summary: {e}")
 
 except Exception as e:
     st.error(f"Error: {e}")
