@@ -367,6 +367,88 @@ def build_shap_explainer(_model, _background):
 _has_ow = bool(st.secrets.get("OPENWEATHER_API_KEY", ""))
 _has_hw = bool(st.secrets.get("HOPSWORKS_API_KEY", ""))
 
+
+def plot_shap_beeswarm_dark(sv_bg, feature_values_bg, feature_cols, sv_latest=None):
+    """
+    The 'real' scattered SHAP plot (a beeswarm): every dot is one historical
+    instance's SHAP value for a feature, colored by that instance's actual
+    feature value (blue = low, red = high) — same convention as shap's own
+    summary_plot. sv_latest, if given, overlays the *current* forecast's
+    per-feature SHAP value as a hollow diamond on top of the distribution,
+    so "why this forecast" stays answerable alongside the fuller picture.
+
+    sv_bg: array (n_samples, n_features)
+    feature_values_bg: DataFrame (n_samples, n_features), raw (unscaled) values
+    sv_latest: optional array (n_features,)
+    """
+    n_features = len(feature_cols)
+    order = np.argsort(np.mean(np.abs(sv_bg), axis=0))[::-1]  # most important first
+    ordered_features = [feature_cols[i] for i in order]
+
+    fig_h = max(3.6, 0.42 * n_features)
+    fig, ax = plt.subplots(figsize=(13, fig_h))
+    fig.patch.set_facecolor("#0A0C10")
+    ax.set_facecolor("#0A0C10")
+
+    cmap = plt.cm.coolwarm
+    rng = np.random.default_rng(7)
+
+    for row_pos, feat_idx in enumerate(order):
+        y = n_features - 1 - row_pos
+        vals = feature_values_bg.iloc[:, feat_idx].values.astype(float)
+        vmin, vmax = np.nanmin(vals), np.nanmax(vals)
+        norm_vals = (vals - vmin) / (vmax - vmin) if vmax > vmin else np.full_like(vals, 0.5)
+        jitter = rng.uniform(-0.32, 0.32, size=len(vals))
+        ax.scatter(sv_bg[:, feat_idx], np.full(len(vals), y) + jitter, c=norm_vals,
+                   cmap=cmap, s=18, alpha=0.85, linewidths=0, vmin=0, vmax=1, zorder=3)
+        if sv_latest is not None:
+            ax.scatter([sv_latest[feat_idx]], [y], marker="D", s=75,
+                       facecolor="none", edgecolor="#F4F6F9", linewidths=1.6, zorder=5)
+
+    ax.axvline(0, color="#4E5563", linewidth=0.8, zorder=1)
+    ax.set_yticks(range(n_features))
+    ax.set_yticklabels(list(reversed(ordered_features)), fontsize=9)
+    ax.set_ylim(-0.6, n_features - 0.4)
+    ax.set_xlabel("Impact on predicted AQI (SHAP value)", color="#7B8395", fontsize=9)
+    ax.tick_params(colors="#7B8395", labelsize=9)
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.grid(True, axis="x", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(0, 1))
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, pad=0.012, fraction=0.022)
+    cbar.set_ticks([0, 1])
+    cbar.set_ticklabels(["Low", "High"])
+    cbar.set_label("Feature value", color="#7B8395", fontsize=8.5)
+    cbar.ax.yaxis.set_tick_params(color="#7B8395", labelsize=8)
+    plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="#B4BBC9")
+
+    plt.tight_layout()
+    return fig
+
+
+def plot_shap_bar_dark(feature_names, shap_values):
+    """Single-instance SHAP bar chart — used for the LSTM path, where
+    computing a full beeswarm would mean re-running the (expensive)
+    gradient explainer over many 24-hour windows instead of just one."""
+    shap_df = pd.DataFrame({"feature": feature_names, "shap": shap_values})
+    shap_df["abs_shap"] = shap_df["shap"].abs()
+    shap_df = shap_df.sort_values("abs_shap", ascending=True)
+    fig, ax = plt.subplots(figsize=(13, max(2.4, 0.34 * len(shap_df))))
+    fig.patch.set_facecolor("#0A0C10")
+    ax.set_facecolor("#0A0C10")
+    bar_colors = ["#F87171" if v > 0 else "#34D399" for v in shap_df["shap"]]
+    ax.barh(shap_df["feature"], shap_df["shap"], color=bar_colors, height=0.6)
+    ax.axvline(0, color="#4E5563", linewidth=0.8)
+    ax.set_xlabel("Impact on predicted AQI (SHAP value)", color="#7B8395", fontsize=9)
+    ax.tick_params(colors="#7B8395", labelsize=9)
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.grid(True, axis="x", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
+    plt.tight_layout()
+    return fig
+
 # ---------------------------------------------------------------------------
 # Feature Store
 # ---------------------------------------------------------------------------
@@ -930,8 +1012,6 @@ try:
                 if len(feat_hist) < min_rows_needed:
                     st.info(f"Not enough recent history yet to explain this forecast — got {len(feat_hist)} complete rows, need at least {min_rows_needed} ({model_source}).")
                 else:
-                    feature_names, shap_values = None, None
-
                     if is_lstm:
                         scaled_all = scaler.transform(feat_hist[feature_cols])
                         windows = np.array([
@@ -951,38 +1031,29 @@ try:
                         # Sum contributions across the 24-hour window to get one
                         # value per feature (total influence, not per-hour detail).
                         per_feature = sv[0].sum(axis=0)
-                        feature_names, shap_values = feature_cols, per_feature
+
+                        fig = plot_shap_bar_dark(feature_cols, per_feature)
+                        st.pyplot(fig)
+                        plt.close(fig)
+                        st.html("<p class='section-note'>Red pushes the forecast up, green pulls it down. Summed across the model's 24-hour input window — every feature shown, this specific forecast only.</p>")
+                        st.html("<p class='insight-caption'>The scattered 'beeswarm' view (many instances at once, colored by feature value) needs the gradient explainer to re-run over many 24-hour windows, which is expensive for the sequence model — so the LSTM path shows this single-forecast breakdown instead.</p>")
                     else:
-                        bg_sample = feat_hist.sample(min(50, len(feat_hist)), random_state=42)
+                        # A real beeswarm needs many instances, not just the
+                        # one being predicted — sample a decent chunk of
+                        # recent history so the scatter has real spread.
+                        bg_sample = feat_hist.sample(min(120, len(feat_hist)), random_state=42)
                         bg_scaled = scaler.transform(bg_sample[feature_cols])
                         latest_row = feat_hist.iloc[[-1]]
                         X_latest_scaled = scaler.transform(latest_row[feature_cols])
 
                         explainer, kind = build_shap_explainer(model, bg_scaled)
-                        sv = explainer.shap_values(X_latest_scaled)
-                        feature_names, shap_values = feature_cols, np.array(sv).flatten()
+                        sv_bg = np.array(explainer.shap_values(bg_scaled)).reshape(len(bg_sample), len(feature_cols))
+                        sv_latest = np.array(explainer.shap_values(X_latest_scaled)).flatten()
 
-                    shap_df = pd.DataFrame({"feature": feature_names, "shap": shap_values})
-                    shap_df["abs_shap"] = shap_df["shap"].abs()
-                    shap_df = shap_df.sort_values("abs_shap", ascending=True).tail(8)
-
-                    fig, ax = plt.subplots(figsize=(13, max(2.4, 0.34 * len(shap_df))))
-                    fig.patch.set_facecolor("#0A0C10")
-                    ax.set_facecolor("#0A0C10")
-                    bar_colors = ["#F87171" if v > 0 else "#34D399" for v in shap_df["shap"]]
-                    ax.barh(shap_df["feature"], shap_df["shap"], color=bar_colors, height=0.6)
-                    ax.axvline(0, color="#4E5563", linewidth=0.8)
-                    ax.set_xlabel("Impact on predicted AQI (SHAP value)", color="#7B8395", fontsize=9)
-                    ax.tick_params(colors="#7B8395", labelsize=9)
-                    for s in ax.spines.values(): s.set_visible(False)
-                    ax.grid(True, axis="x", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
-                    plt.tight_layout()
-                    st.pyplot(fig)
-                    plt.close(fig)
-                    note = "Red pushes the forecast up, green pulls it down."
-                    if is_lstm:
-                        note += " Summed across the model's 24-hour input window."
-                    st.html(f"<p class='section-note'>{note}</p>")
+                        fig = plot_shap_beeswarm_dark(sv_bg, bg_sample[feature_cols], feature_cols, sv_latest=sv_latest)
+                        st.pyplot(fig)
+                        plt.close(fig)
+                        st.html(f"<p class='section-note'>Each dot is one of the last {len(bg_sample)} hourly readings — position shows its pull on AQI, color shows whether that feature's value was low (blue) or high (red) at the time. The hollow diamonds mark this specific forecast.</p>")
         except Exception as e:
             st.error(f"Explainability: {e}")
 
