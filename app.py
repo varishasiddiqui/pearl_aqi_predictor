@@ -201,9 +201,9 @@ st.markdown("""<style>
 </style>""", unsafe_allow_html=True)
 
 
-# ---------------------------------------------------------------------------
-# Model loading
-# ---------------------------------------------------------------------------
+                                                                             
+               
+                                                                             
 @st.cache_resource
 def load_model():
     hopsworks_key = st.secrets.get("HOPSWORKS_API_KEY", "")
@@ -249,7 +249,6 @@ model, scaler, feature_cols, model_source, model_meta = load_model()
 
 
 def describe_model_type(m):
-    """Human-readable model type + whether it's the sequence (LSTM) model."""
     is_lstm = "LSTM" in type(m).__name__ or type(m).__name__ == "Sequential"
     if is_lstm:
         return "LSTM (sequence model)", True
@@ -283,9 +282,9 @@ def plot_model_metrics(metrics: dict):
     return fig
 
 
-# Maps training_pipeline.py's metric-key prefixes (row["Model"].lower()) to
-# a clean display label, and to the type_name describe_model_type() returns,
-# so the deployed model's bar can be highlighted in the comparison charts.
+                                                                           
+                                                                            
+                                                                          
 _CANDIDATE_LABELS = {"ridge": "Ridge", "randomforest": "Random Forest", "lstm": "LSTM"}
 _TYPE_NAME_TO_PREFIX = {"Ridge Regression": "ridge", "Random Forest": "randomforest", "LSTM (sequence model)": "lstm"}
 
@@ -347,11 +346,11 @@ def plot_global_feature_importance(model, feature_cols):
     return fig
 
 
-# ---------------------------------------------------------------------------
-# SHAP explainability — read-only, built on top of the already-loaded model.
-# Does not touch training/prediction logic; just explains it.
-# ---------------------------------------------------------------------------
-SHAP_TIMESTEPS = 24  # matches TIMESTEPS in training_pipeline.py for the LSTM
+                                                                             
+                                                                            
+                                                             
+                                                                             
+SHAP_TIMESTEPS = 24                                                          
 
 
 @st.cache_resource
@@ -364,7 +363,7 @@ def build_shap_explainer(_model, _background):
     elif isinstance(_model, Ridge):
         return shap.LinearExplainer(_model, _background), "linear"
     else:
-        import tensorflow as tf  # noqa: F401  (guarded, TF is heavy)
+        import tensorflow as tf                                      
         return shap.GradientExplainer(_model, _background), "lstm"
 
 
@@ -375,7 +374,7 @@ _has_hw = bool(st.secrets.get("HOPSWORKS_API_KEY", ""))
 def plot_shap_beeswarm_dark(sv_bg, feature_values_bg, feature_cols, sv_latest=None):
 
     n_features = len(feature_cols)
-    order = np.argsort(np.mean(np.abs(sv_bg), axis=0))[::-1]  # most important first
+    order = np.argsort(np.mean(np.abs(sv_bg), axis=0))[::-1]                        
     ordered_features = [feature_cols[i] for i in order]
 
     fig_h = max(3.6, 0.42 * n_features)
@@ -422,9 +421,6 @@ def plot_shap_beeswarm_dark(sv_bg, feature_values_bg, feature_cols, sv_latest=No
 
 
 def plot_shap_bar_dark(feature_names, shap_values):
-    """Single-instance SHAP bar chart — used for the LSTM path, where
-    computing a full beeswarm would mean re-running the (expensive)
-    gradient explainer over many 24-hour windows instead of just one."""
     shap_df = pd.DataFrame({"feature": feature_names, "shap": shap_values})
     shap_df["abs_shap"] = shap_df["shap"].abs()
     shap_df = shap_df.sort_values("abs_shap", ascending=True)
@@ -442,9 +438,9 @@ def plot_shap_bar_dark(feature_names, shap_values):
     plt.tight_layout()
     return fig
 
-# ---------------------------------------------------------------------------
-# Feature Store
-# ---------------------------------------------------------------------------
+                                                                             
+               
+                                                                             
 @st.cache_data(ttl=1800)
 def fetch_recent_actuals_from_feature_store(lookback_hours=72):
     hopsworks_key = st.secrets.get("HOPSWORKS_API_KEY", "")
@@ -510,21 +506,21 @@ def fetch_full_history_from_feature_store():
         return pd.DataFrame()
 
 
-# ---------------------------------------------------------------------------
-# Live data
-# ---------------------------------------------------------------------------
+                                                                             
+           
+                                                                             
 @st.cache_data(ttl=1800)
 def fetch_current_data():
     API_KEY = st.secrets.get("OPENWEATHER_API_KEY", "")
 
-    # ---- Pollution (OpenWeather) ----
+                                       
     curr_url = (f"http://api.openweathermap.org/data/2.5/air_pollution"
                 f"?lat={LAT}&lon={LON}&appid={API_KEY}")
     curr_resp = requests.get(curr_url, timeout=15)
     curr_resp.raise_for_status()
     pollution = curr_resp.json()["list"][0]["components"]
 
-    # ---- Pollutant forecast (OpenWeather) ----
+                                                
     poll_forecast_df = pd.DataFrame()
     try:
         fc_url = (f"http://api.openweathermap.org/data/2.5/air_pollution/forecast"
@@ -542,7 +538,7 @@ def fetch_current_data():
     except Exception:
         pass
 
-    # ---- Weather (Open-Meteo) — graceful fallback if 503 ----
+                                                               
     weather = {"temperature_2m": 0, "relative_humidity_2m": 0, "wind_speed_10m": 0, "surface_pressure": 0}
     hourly_df = pd.DataFrame()
     weather_ok = False
@@ -570,7 +566,7 @@ def fetch_current_data():
     except Exception:
         weather_ok = False
 
-    # ---- Merge pollutant forecast + weather ----
+                                                  
     combined_df = pd.DataFrame()
     if not poll_forecast_df.empty and not hourly_df.empty:
         combined_df = pd.merge_asof(
@@ -769,7 +765,7 @@ try:
     current_aqi, dominant = get_aqi(pollution)
     cat, breathe_speed, color, cat_desc = aqi_info(current_aqi)
 
-    # ===== TOP BAR =====
+                         
     st.html(f"""
     <div class='topbar'>
         <div class='topbar-left'>
@@ -792,11 +788,11 @@ try:
 
     tab_live, tab_insights, tab_model = st.tabs(["Live station", "Historical insights", "Model summary"])
 
-    # =========================================================================
-    # TAB 1 — LIVE STATION (current conditions, trend, forecast, SHAP)
-    # =========================================================================
+                                                                               
+                                                                      
+                                                                               
     with tab_live:
-        # ===== HERO CARD =====
+                               
         if weather_ok:
             stats_html = f"""
             <div class='stat-item'><span class='stat-label'>Temperature</span><span class='stat-val'>{weather['temperature_2m']:.1f}<span class='stat-unit'>°C</span></span></div>
@@ -821,7 +817,7 @@ try:
         </div>
         """)
 
-        # ===== POLLUTANT LEVELS =====
+                                      
         st.html("<div class='section-head'><h3 class='section-title'>Pollutant levels</h3></div>")
         show_p = {k: v for k, v in pollution.items() if k not in ["no", "nh3"]}
         threshold = {"pm2_5": 75, "pm10": 150, "no2": 100, "so2": 75, "o3": 70, "co": 10000}
@@ -842,7 +838,7 @@ try:
         cells += "</div>"
         st.html(cells)
 
-        # ===== TODAY'S TREND =====
+                                   
         st.html(f"""
         <div class='section-head'>
             <h3 class='section-title'>AQI trend · {now_karachi.strftime('%d %b')}</h3>
@@ -894,7 +890,7 @@ try:
         except Exception as e:
             st.warning(f"Trend: {e}")
 
-        # ===== 3-DAY FORECAST =====
+                                    
         st.html("""
         <div class='section-head'>
             <h3 class='section-title'>3-day forecast</h3>
@@ -907,7 +903,8 @@ try:
                 else:
                     st.warning("Forecast unavailable.")
             else:
-                future_df = combined_df[combined_df["datetime"] > now_karachi].sort_values("datetime")
+                tomorrow_start = (now_karachi + pd.Timedelta(days=1)).normalize()
+                future_df = combined_df[combined_df["datetime"] >= tomorrow_start].sort_values("datetime")
                 times, forecast_aqi = build_forecast(future_df, hist_lookback_df, current_aqi, pollution, feature_cols, model, scaler, hours=72)
                 if not times:
                     st.warning("Not enough forecast data.")
@@ -958,7 +955,7 @@ try:
         except Exception as e:
             st.error(f"Forecast: {e}")
 
-        # ===== SHAP EXPLAINABILITY =====
+                                         
         st.html("""
         <div class='section-head'>
             <h3 class='section-title'>Why this forecast</h3>
@@ -995,10 +992,10 @@ try:
 
                         explainer, kind = build_shap_explainer(model, bg_sample)
                         sv = explainer.shap_values(X_latest_seq)
-                        sv = np.array(sv)  # shape ~ (1, 1, timesteps, features) or (1, timesteps, features)
+                        sv = np.array(sv)                                                                   
                         sv = sv.reshape(-1, SHAP_TIMESTEPS, len(feature_cols))
-                        # Sum contributions across the 24-hour window to get one
-                        # value per feature (total influence, not per-hour detail).
+                                                                                
+                                                                                   
                         per_feature = sv[0].sum(axis=0)
 
                         fig = plot_shap_bar_dark(feature_cols, per_feature)
@@ -1007,9 +1004,9 @@ try:
                         st.html("<p class='section-note'>Red pushes the forecast up, green pulls it down. Summed across the model's 24-hour input window — every feature shown, this specific forecast only.</p>")
                         st.html("<p class='insight-caption'>The scattered 'beeswarm' view (many instances at once, colored by feature value) needs the gradient explainer to re-run over many 24-hour windows, which is expensive for the sequence model — so the LSTM path shows this single-forecast breakdown instead.</p>")
                     else:
-                        # A real beeswarm needs many instances, not just the
-                        # one being predicted — sample a decent chunk of
-                        # recent history so the scatter has real spread.
+                                                                            
+                                                                        
+                                                                        
                         bg_sample = feat_hist.sample(min(120, len(feat_hist)), random_state=42)
                         bg_scaled = scaler.transform(bg_sample[feature_cols])
                         latest_row = feat_hist.iloc[[-1]]
@@ -1026,7 +1023,7 @@ try:
         except Exception as e:
             st.error(f"Explainability: {e}")
 
-        # ===== GUIDANCE =====
+                              
         tips = {
             "Good": ("Excellent air quality — perfect for outdoor activity.", "#34D399"),
             "Moderate": ("Acceptable. Sensitive people should limit prolonged exertion.", "#FBBF24"),
@@ -1041,9 +1038,9 @@ try:
         <div class='guidance' style='--gl-color:{tc}'><span class='g-bar'></span><div><p class='g-title'>{cat}</p><p class='g-body'>{tb}</p></div></div>
         """)
 
-    # =========================================================================
-    # TAB 2 — HISTORICAL INSIGHTS (EDA, same data/plots as eda.py, inline)
-    # =========================================================================
+                                                                               
+                                                                          
+                                                                               
     with tab_insights:
         st.html("""
         <div class='section-head'>
@@ -1094,9 +1091,9 @@ try:
         except Exception as e:
             st.error(f"Historical insights: {e}")
 
-    # =========================================================================
-    # TAB 3 — MODEL SUMMARY (which model is deployed, and why it was chosen)
-    # =========================================================================
+                                                                               
+                                                                            
+                                                                               
     with tab_model:
         st.html("""
         <div class='section-head'>
@@ -1141,7 +1138,7 @@ try:
                         plt.close(fig)
                 st.html("<p class='insight-caption'>Teal bar = deployed model. All three candidates were evaluated on the same holdout split in training_pipeline.py.</p>")
 
-                # Raw comparison table too, for anyone who wants exact numbers.
+                                                                               
                 st.html("<p class='insight-label' style='margin-top:20px;'>Raw comparison table</p>")
                 rows = []
                 for prefix, label in _CANDIDATE_LABELS.items():
