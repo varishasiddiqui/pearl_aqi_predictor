@@ -56,7 +56,7 @@ st.markdown("""<style>
         background-image: radial-gradient(1100px 520px at 12% -10%, rgba(69,217,200,0.05), transparent 60%) !important;
         background-attachment: fixed !important;
     }
-    .block-container { padding-top: 1.1rem; padding-bottom: 2.5rem; max-width: 880px; }
+    .block-container { padding-top: 1.1rem; padding-bottom: 2.5rem; max-width: 1180px; }
     h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif !important; color: var(--ink) !important; letter-spacing: -0.01em; }
     p, span, label, div { color: var(--ink-2); }
 
@@ -103,14 +103,14 @@ st.markdown("""<style>
     /* ===== HERO — the one signature element: a tinted glow card ===== */
     .hero-card {
         position: relative; overflow: hidden;
-        display: flex; align-items: center; justify-content: space-between; gap: 28px; flex-wrap: wrap;
+        display: flex; align-items: center; justify-content: flex-start; gap: 64px; flex-wrap: wrap;
         border-radius: 20px; border: 1px solid var(--hc-color, var(--line));
         background:
-            radial-gradient(480px 240px at 0% 0%, color-mix(in srgb, var(--hc-color, #45D9C8) 20%, transparent), transparent 70%),
+            radial-gradient(650px 280px at 0% 0%, color-mix(in srgb, var(--hc-color, #45D9C8) 18%, transparent), transparent 70%),
             var(--panel);
-        padding: 26px 30px; margin-bottom: 26px;
+        padding: 30px 38px; margin-bottom: 26px;
     }
-    .hero-left { display: flex; flex-direction: column; gap: 10px; min-width: 220px; }
+    .hero-left { display: flex; flex-direction: column; gap: 10px; min-width: 220px; flex: 1 1 320px; max-width: 420px; }
     .hero-num-row { display: flex; align-items: baseline; gap: 12px; }
     .hero-num { font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 64px; line-height: 1; letter-spacing: -0.03em; }
     .hero-cat {
@@ -131,17 +131,17 @@ st.markdown("""<style>
     }
     .aqi-scale-labels { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--ink-4); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
 
-    .hero-stats { display: grid; grid-template-columns: repeat(2, auto); gap: 16px 32px; }
+    .hero-stats { display: grid; grid-template-columns: repeat(4, auto); gap: 20px 44px; flex: 1 1 auto; }
     .stat-item { display: flex; flex-direction: column; gap: 3px; }
     .stat-label { font-size: 11px; color: var(--ink-4); }
-    .stat-val { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 20px; color: var(--ink); }
+    .stat-val { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 22px; color: var(--ink); }
     .stat-val .stat-unit { font-size: 11px; font-weight: 500; color: var(--ink-4); margin-left: 2px; }
     .weather-note { font-size: 12.5px; color: var(--ink-4); }
-    .hero-stats { grid-template-columns: repeat(2, auto); }
+    @media (max-width: 900px) { .hero-stats { grid-template-columns: repeat(2, auto); } }
     @media (max-width: 640px) {
         .hero-card { padding: 18px; flex-direction: column; align-items: flex-start; gap: 18px; }
         .hero-num { font-size: 48px; }
-        .hero-stats { gap: 14px 24px; }
+        .hero-stats { grid-template-columns: repeat(2, auto); gap: 14px 24px; }
     }
 
     /* ===== SECTION HEAD ===== */
@@ -197,9 +197,10 @@ st.markdown("""<style>
 
     .stApp [data-testid="stMain"] { margin-left: 0 !important; }
     .stApp [data-testid="stMainBlockContainer"], .block-container {
-        max-width: 720px !important; margin-left: auto !important; margin-right: auto !important;
-        padding-left: 1.1rem !important; padding-right: 1.1rem !important;
+        max-width: 1180px !important; margin-left: auto !important; margin-right: auto !important;
+        padding-left: 2rem !important; padding-right: 2rem !important;
     }
+    @media (max-width: 1240px) { .block-container { max-width: 96vw !important; } }
     @media (max-width: 480px) { .block-container { padding-left: 0.8rem !important; padding-right: 0.8rem !important; } }
 
     .footer-note { text-align: center; color: var(--ink-4); font-size: 11px; margin-top: 26px; padding: 16px 0 0; border-top: 1px solid var(--line); }
@@ -279,7 +280,7 @@ def plot_model_metrics(metrics: dict):
     items.sort(key=lambda kv: kv[1])
     labels = [k for k, _ in items]
     values = [v for _, v in items]
-    fig, ax = plt.subplots(figsize=(8, max(1.8, 0.55 * len(items))))
+    fig, ax = plt.subplots(figsize=(11, max(1.8, 0.55 * len(items))))
     fig.patch.set_facecolor("#0A0C10")
     ax.set_facecolor("#0A0C10")
     ax.barh(labels, values, color="#45D9C8", height=0.55)
@@ -326,7 +327,7 @@ def plot_metric_comparison(metric_name, values: dict, winner_prefix=None):
     labels = [_CANDIDATE_LABELS.get(k, k.title()) for k, _ in ordered]
     values_list = [v for _, v in ordered]
     colors = ["#45D9C8" if k == winner_prefix else "#4E5563" for k, _ in ordered]
-    fig, ax = plt.subplots(figsize=(6.2, 2.0))
+    fig, ax = plt.subplots(figsize=(5.8, 2.0))
     fig.patch.set_facecolor("#0A0C10")
     ax.set_facecolor("#0A0C10")
     ax.barh(labels, values_list, color=colors, height=0.55)
@@ -634,7 +635,7 @@ def _style_dark_ax(ax, show_x_grid=False):
 
 
 def plot_full_aqi_timeseries(df):
-    fig, ax = plt.subplots(figsize=(6.6, 3.1))
+    fig, ax = plt.subplots(figsize=(12.8, 3.4))
     fig.patch.set_facecolor("#0A0C10")
     ax.plot(df["datetime"], df["aqi"], color="#45D9C8", linewidth=0.9)
     for y, c in [(50, "#34D399"), (100, "#FBBF24"), (150, "#FB923C"), (200, "#F87171")]:
@@ -649,7 +650,7 @@ def plot_full_aqi_timeseries(df):
 
 def plot_hourly_avg(df):
     hourly = df.groupby("hour")["aqi"].mean().reindex(range(24))
-    fig, ax = plt.subplots(figsize=(6.6, 3.1))
+    fig, ax = plt.subplots(figsize=(6.0, 3.0))
     fig.patch.set_facecolor("#0A0C10")
     ax.bar(hourly.index, hourly.values, color="#34D399")
     ax.axhline(100, color="#FBBF24", linestyle="--", alpha=0.4, linewidth=0.7, label="Moderate threshold")
@@ -668,7 +669,7 @@ def plot_monthly_avg(df):
                    7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"}
     monthly = df.groupby("month")["aqi"].mean().sort_index()
     labels = [month_names.get(m, str(m)) for m in monthly.index]
-    fig, ax = plt.subplots(figsize=(6.6, 3.1))
+    fig, ax = plt.subplots(figsize=(6.0, 3.0))
     fig.patch.set_facecolor("#0A0C10")
     ax.bar(labels, monthly.values, color="#A78BFA")
     ax.set_xlabel("Month", color="#7B8395", fontsize=9)
@@ -685,7 +686,7 @@ def plot_correlation_heatmap_dark(df):
     # Sized for FULL container width (not a half column) — with ~20 features
     # a cramped half-width heatmap turns into unreadable overlapping labels,
     # so this needs real horizontal room to stay legible.
-    fig, ax = plt.subplots(figsize=(11, max(6.5, 0.42 * n)))
+    fig, ax = plt.subplots(figsize=(13, max(6.5, 0.4 * n)))
     fig.patch.set_facecolor("#0A0C10")
     ax.set_facecolor("#0A0C10")
     try:
@@ -811,7 +812,7 @@ try:
                 else:
                     st.warning("No trend data available yet.")
             else:
-                fig, ax = plt.subplots(figsize=(10, 2.8))
+                fig, ax = plt.subplots(figsize=(13, 3.0))
                 fig.patch.set_facecolor("#0A0C10")
                 ax.set_facecolor("#0A0C10")
                 ds = now_karachi.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -879,7 +880,7 @@ try:
                     day_cols_html += "</div>"
                     st.html(day_cols_html)
 
-                    fig, ax = plt.subplots(figsize=(10, 1.9))
+                    fig, ax = plt.subplots(figsize=(13, 2.1))
                     fig.patch.set_facecolor("#0A0C10")
                     ax.set_facecolor("#0A0C10")
                     ax.plot(fdf["datetime"], fdf["aqi"], color=color, linewidth=1.4)
@@ -965,7 +966,7 @@ try:
                     shap_df["abs_shap"] = shap_df["shap"].abs()
                     shap_df = shap_df.sort_values("abs_shap", ascending=True).tail(8)
 
-                    fig, ax = plt.subplots(figsize=(10, max(2.2, 0.32 * len(shap_df))))
+                    fig, ax = plt.subplots(figsize=(13, max(2.4, 0.34 * len(shap_df))))
                     fig.patch.set_facecolor("#0A0C10")
                     ax.set_facecolor("#0A0C10")
                     bar_colors = ["#F87171" if v > 0 else "#34D399" for v in shap_df["shap"]]
