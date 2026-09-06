@@ -249,6 +249,7 @@ model, scaler, feature_cols, model_source, model_meta = load_model()
 
 
 def describe_model_type(m):
+    """Human-readable model type + whether it's the sequence (LSTM) model."""
     is_lstm = "LSTM" in type(m).__name__ or type(m).__name__ == "Sequential"
     if is_lstm:
         return "LSTM (sequence model)", True
@@ -421,6 +422,9 @@ def plot_shap_beeswarm_dark(sv_bg, feature_values_bg, feature_cols, sv_latest=No
 
 
 def plot_shap_bar_dark(feature_names, shap_values):
+    """Single-instance SHAP bar chart — used for the LSTM path, where
+    computing a full beeswarm would mean re-running the (expensive)
+    gradient explainer over many 24-hour windows instead of just one."""
     shap_df = pd.DataFrame({"feature": feature_names, "shap": shap_values})
     shap_df["abs_shap"] = shap_df["shap"].abs()
     shap_df = shap_df.sort_values("abs_shap", ascending=True)
@@ -699,15 +703,22 @@ def plot_full_aqi_timeseries(df):
 
 def plot_hourly_avg(df):
     hourly = df.groupby("hour")["aqi"].mean().reindex(range(24))
+    bar_colors = [aqi_info(v)[2] if pd.notna(v) else "#4E5563" for v in hourly.values]
     fig, ax = plt.subplots(figsize=(6.0, 3.0))
     fig.patch.set_facecolor("#0A0C10")
-    ax.bar(hourly.index, hourly.values, color="#34D399")
-    ax.axhline(100, color="#FBBF24", linestyle="--", alpha=0.4, linewidth=0.7, label="Moderate threshold")
-    ax.axhline(150, color="#FB923C", linestyle="--", alpha=0.4, linewidth=0.7, label="Unhealthy threshold")
+    ax.bar(hourly.index, hourly.values, color=bar_colors)
+    data_max = np.nanmax(hourly.values) if not hourly.isna().all() else 50
+    ymax = max(data_max * 1.35, 60)
+    ax.set_ylim(0, ymax)
+    if 100 < ymax:
+        ax.axhline(100, color="#FBBF24", linestyle="--", alpha=0.4, linewidth=0.7, label="Moderate threshold")
+    if 150 < ymax:
+        ax.axhline(150, color="#FB923C", linestyle="--", alpha=0.4, linewidth=0.7, label="Unhealthy threshold")
     ax.set_xlabel("Hour of day (0 = midnight)", color="#7B8395", fontsize=9)
     ax.set_ylabel("Average AQI", color="#7B8395", fontsize=9)
     ax.set_xticks(range(0, 24, 1))
-    ax.legend(frameon=False, labelcolor="#B4BBC9", fontsize=7.5, loc="upper right")
+    if ax.get_legend_handles_labels()[0]:
+        ax.legend(frameon=False, labelcolor="#B4BBC9", fontsize=7.5, loc="upper right")
     _style_dark_ax(ax)
     plt.tight_layout()
     return fig
