@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import shap
+from sklearn.linear_model import Ridge
+from sklearn.ensemble import RandomForestRegressor
 
 # 'Inter'/'Space Grotesk' are loaded via CSS for the browser, but matplotlib
 # renders server-side and doesn't have them installed — every ax label call
@@ -189,15 +191,6 @@ st.markdown("""<style>
     .insight-sublabel { font-size: 11.5px; color: var(--ink-4) !important; margin: 0 0 10px 13px; }
     .insight-caption { font-size: 11px; color: var(--ink-4); margin: 0 0 6px; }
 
-    /* Toggle switch — match the app's teal accent instead of Streamlit's default blue */
-    [data-testid="stToggle"] label div[data-baseweb="checkbox"] > div:first-child {
-        background-color: var(--panel-2) !important; border-color: var(--line) !important;
-    }
-    [data-testid="stToggle"] input:checked ~ div[data-baseweb="checkbox"] > div:first-child {
-        background-color: #45D9C8 !important;
-    }
-    [data-testid="stToggle"] p { color: var(--ink-2) !important; font-size: 13px; }
-
     .stAlert { border-radius: 12px !important; background: var(--panel) !important; border: 1px solid var(--line) !important; }
     .stAlert p { color: var(--ink-2) !important; }
     hr { border-color: var(--line) !important; }
@@ -236,7 +229,18 @@ def load_model():
                     model = joblib.load(os.path.join(model_dir, "best_model.pkl"))
                     scaler = joblib.load(os.path.join(model_dir, "scaler.pkl"))
                     features = joblib.load(os.path.join(model_dir, "feature_cols.pkl"))
-                    return model, scaler, features, f"Hopsworks v{registry_model.version}"
+                    # Only the winning model gets registered — Hopsworks doesn't
+                    # keep the rejected candidates. Whatever was logged into
+                    # training_metrics at registration time (e.g. this model's
+                    # own RMSE, or, if the training script logged them, the
+                    # other candidates' scores too) is all that's available here.
+                    raw_metrics = getattr(registry_model, "training_metrics", None) or {}
+                    model_meta = {
+                        "version": registry_model.version,
+                        "metrics": dict(raw_metrics),
+                        "description": getattr(registry_model, "description", None),
+                    }
+                    return model, scaler, features, f"Hopsworks v{registry_model.version}", model_meta
                 except Exception as version_err:
                     last_error = version_err
                     continue
@@ -247,10 +251,47 @@ def load_model():
     model = joblib.load("best_model.pkl")
     scaler = joblib.load("scaler.pkl")
     features = joblib.load("feature_cols.pkl")
-    return model, scaler, features, "local fallback"
+    return model, scaler, features, "local fallback", {}
 
 
-model, scaler, feature_cols, model_source = load_model()
+model, scaler, feature_cols, model_source, model_meta = load_model()
+
+
+def describe_model_type(m):
+    """Human-readable model type + whether it's the sequence (LSTM) model."""
+    is_lstm = "LSTM" in type(m).__name__ or type(m).__name__ == "Sequential"
+    if is_lstm:
+        return "LSTM (sequence model)", True
+    if isinstance(m, RandomForestRegressor):
+        return "Random Forest", False
+    if isinstance(m, Ridge):
+        return "Ridge Regression", False
+    return type(m).__name__, False
+
+
+def plot_model_metrics(metrics: dict):
+    """Bar chart of whatever numeric metrics were logged for the registered
+    model version. Works with any keys — one model's own RMSE, or, if the
+    training script logs them, several candidates' scores side by side."""
+    items = [(k, v) for k, v in metrics.items() if isinstance(v, (int, float))]
+    if not items:
+        return None
+    items.sort(key=lambda kv: kv[1])
+    labels = [k for k, _ in items]
+    values = [v for _, v in items]
+    fig, ax = plt.subplots(figsize=(8, max(1.8, 0.55 * len(items))))
+    fig.patch.set_facecolor("#0A0C10")
+    ax.set_facecolor("#0A0C10")
+    ax.barh(labels, values, color="#45D9C8", height=0.55)
+    for i, v in enumerate(values):
+        ax.text(v, i, f"  {v:.3f}", va="center", color="#B4BBC9", fontsize=8.5)
+    ax.set_xlabel("Value", color="#7B8395", fontsize=9)
+    ax.tick_params(colors="#7B8395", labelsize=9)
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.grid(True, axis="x", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
+    plt.tight_layout()
+    return fig
 
 
 # ---------------------------------------------------------------------------
@@ -703,6 +744,44 @@ try:
         cells += "</div>"
         st.html(cells)
 
+        # ===== MODEL IN USE =====
+        st.html("""
+        <div class='section-head'>
+            <h3 class='section-title'>Model in use</h3>
+            <span class='section-note'>Registered model behind this forecast</span>
+        </div>""")
+        try:
+            type_name, _ = describe_model_type(model)
+            version_label = model_meta.get("version") if model_meta else None
+            version_str = f"Version {version_label}" if version_label is not None else model_source
+            st.html(f"""
+            <div class='guidance' style='--gl-color:#45D9C8;'>
+                <span class='g-bar'></span>
+                <div>
+                    <p class='g-title'>{type_name} · {version_str}</p>
+                    <p class='g-body'>Currently deployed model, loaded from {model_source}.</p>
+                </div>
+            </div>""")
+
+            numeric_metrics = {}
+            if model_meta and model_meta.get("metrics"):
+                numeric_metrics = {k: v for k, v in model_meta["metrics"].items() if isinstance(v, (int, float))}
+
+            if numeric_metrics:
+                st.html("<p class='insight-label' style='margin-top:16px;'>Logged error metrics for this version</p>")
+                fig = plot_model_metrics(numeric_metrics)
+                if fig:
+                    st.pyplot(fig)
+                    plt.close(fig)
+                if len(numeric_metrics) == 1:
+                    st.html("<p class='insight-caption'>Only this model's own score was logged at registration time — Hopsworks doesn't keep the rejected candidates, so a Ridge-vs-RF-vs-LSTM comparison needs all three scores logged into <code>training_metrics</code> when the winning model is saved (e.g. <code>model.save(..., metrics={'ridge_rmse': ..., 'rf_rmse': ..., 'lstm_rmse': ...})</code>). Do that once in training_pipeline.py and this chart will show all three automatically — no app changes needed.</p>")
+                else:
+                    st.html("<p class='insight-caption'>Metrics as logged in this version's training_metrics. Lower is better for error metrics like RMSE/MAE.</p>")
+            else:
+                st.info("No training metrics were logged for this registered model version, so there's nothing to compare yet. Log them via `model.save(model_dir, metrics={...})` in training_pipeline.py to see them here.")
+        except Exception as e:
+            st.warning(f"Model info: {e}")
+
         # ===== TODAY'S TREND =====
         st.html(f"""
         <div class='section-head'>
@@ -826,7 +905,7 @@ try:
             <span class='section-note'>SHAP feature contributions</span>
         </div>""")
         try:
-            is_lstm = "LSTM" in type(model).__name__ or type(model).__name__ == "Sequential"
+            is_lstm = describe_model_type(model)[1]
             min_rows_needed = SHAP_TIMESTEPS + 2 if is_lstm else 1
             if hist_lookback_df is None or hist_lookback_df.empty:
                 if not _has_hw:
@@ -969,20 +1048,6 @@ try:
                 <p class='insight-sublabel'>Linear correlation between target AQI and key pollutants/weather features.</p>""")
                 st.pyplot(plot_correlation_heatmap_dark(full_hist_df))
                 plt.close("all")
-
-                # Summary stats — a plain toggle instead of st.expander.
-                # st.expander's arrow relies on an icon-ligature font that
-                # can flash as literal text ("arrow_right") before it loads;
-                # a toggle avoids that dependency entirely.
-                st.html("<div style='margin-top:6px;'></div>")
-                show_stats = st.toggle("Show summary statistics", value=False)
-                if show_stats:
-                    st.dataframe(full_hist_df.describe(include="all").T, use_container_width=True)
-                    na_counts = full_hist_df.isna().sum().sort_values(ascending=False)
-                    na_counts = na_counts[na_counts > 0]
-                    if not na_counts.empty:
-                        st.html("<p class='section-note' style='margin-top:10px;'>Missing values</p>")
-                        st.dataframe(na_counts.rename("missing").to_frame(), use_container_width=True)
         except Exception as e:
             st.error(f"Historical insights: {e}")
 
