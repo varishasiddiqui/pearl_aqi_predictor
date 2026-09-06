@@ -107,6 +107,7 @@ pearl_aqi_predictor/
 ├── requirements*.txt          # Dependencies
 ├── requirements-api*.txt      # Dependencies
 ├── requirements-pipeline*.txt # Dependencies
+├── Project_report.pdf         # Report
 └── .github/workflows/         # CI/CD automation (GitHub Actions)
 ```
 
