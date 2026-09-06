@@ -223,12 +223,30 @@ def register_model(project, model_dir, best_model_name, results_table, feature_c
     final_mae = results_table.loc[results_table["Model"] == best_model_name, "MAE"].values[0]
     final_r2 = results_table.loc[results_table["Model"] == best_model_name, "R2"].values[0]
 
+    # Hopsworks only keeps the winning model's artifacts — the rejected
+    # candidates are gone once training finishes. So the *metrics* are the
+    # only place a "why we picked this model" comparison can live later
+    # (e.g. in the app's dashboard). Log every candidate's holdout score,
+    # not just the winner's, using "<model>_<metric>" keys (e.g.
+    # "ridge_rmse", "randomforest_mae", "lstm_r2") so a comparison chart can
+    # group them without needing to know model names in advance. The
+    # winner's own unprefixed "rmse"/"mae"/"r2" are kept too, for anything
+    # that only cares about the deployed model's headline numbers.
+    all_metrics = {"rmse": float(final_rmse), "mae": float(final_mae), "r2": float(final_r2)}
+    for _, row in results_table.iterrows():
+        prefix = row["Model"].lower()  # "ridge" / "randomforest" / "lstm"
+        all_metrics[f"{prefix}_rmse"] = float(row["RMSE"])
+        all_metrics[f"{prefix}_mae"] = float(row["MAE"])
+        all_metrics[f"{prefix}_r2"] = float(row["R2"])
+
     aqi_model = mr.python.create_model(
         name="aqi_predictor_karachi",
-        metrics={"rmse": float(final_rmse), "mae": float(final_mae), "r2": float(final_r2)},
+        metrics=all_metrics,
         description=(
-            f"{best_model_name} AQI predictor for Karachi, 24h-ahead forecast, "
-            f"{len(feature_cols)} correlation-selected features"
+            f"Selected: {best_model_name} (best holdout R2) for Karachi's 24h-ahead AQI "
+            f"forecast, {len(feature_cols)} correlation-selected features. Full "
+            f"Ridge/RandomForest/LSTM holdout comparison (RMSE, MAE, R2) logged in "
+            f"training_metrics for auditability."
         ),
     )
     # Register the WHOLE folder (model + scaler + feature_cols), not just the
@@ -236,6 +254,8 @@ def register_model(project, model_dir, best_model_name, results_table, feature_c
     # expects all three files to be inside it.
     aqi_model.save(model_dir)
     print(f"Model registered in Hopsworks Model Registry (RMSE={final_rmse:.2f}, MAE={final_mae:.2f}, R2={final_r2:.3f}).")
+    print("Full candidate comparison logged to training_metrics:")
+    print(results_table.to_string(index=False))
 
 
 def main():
