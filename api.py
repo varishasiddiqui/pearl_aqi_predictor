@@ -1,13 +1,4 @@
-"""
-FastAPI serving layer for the Karachi AQI predictor.
 
-Runs as its own process (e.g. deployed separately on Render), independent
-from the Streamlit dashboard (app.py). Deploying/running this does not
-touch or affect the dashboard in any way.
-
-Local dev:
-    OPENWEATHER_API_KEY=xxx HOPSWORKS_API_KEY=xxx uvicorn api:app --reload
-"""
 import os
 from datetime import timedelta, timezone
 
@@ -29,8 +20,7 @@ _model_cache = {}
 
 
 def load_model():
-    """Same resolution order as the dashboard: latest Hopsworks Model
-    Registry version, falling back to local files if unavailable."""
+
     if "model" in _model_cache:
         return _model_cache["model"]
 
