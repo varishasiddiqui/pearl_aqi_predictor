@@ -61,7 +61,6 @@ Open-Meteo API ───┘                              ▲
 | **LSTM (TensorFlow)** | Deep learning model for sequences | Captures sequential/time-series dependencies in AQI trends |
 
   - Evaluated using **RMSE, MAE, and R²** (with `TimeSeriesSplit` cross-validation + final holdout comparison)
-  - **Best model: Ridge Regression (RMSE = 5.29)**
 - **Step 3 →** Stores the trained model (+ scaler + feature list) in the **Hopsworks Model Registry**
 
 ## 4️⃣ Automated CI/CD (GitHub Actions)
@@ -82,8 +81,8 @@ Open-Meteo API ───┘                              ▲
 
 - 📊 **EDA (`eda.py`)** — identifies trends: AQI time series, correlation heatmap, pollutant distributions, hourly/monthly seasonal patterns
 - 🤖 Uses a **variety of models**, from statistical (Ridge) to ensemble (Random Forest) to deep learning (LSTM)
-- 🔍 **SHAP** used for feature importance and explainability — PM2.5 identified as a key predictor
-- 🚨 **Hazard alerts** — webhook notification sent automatically when AQI crosses 150
+- 🔍 **SHAP** used for feature importance and explainability
+- 🚨 **Hazard alerts** — Good or bad aqi range
 
 ---
 
@@ -100,13 +99,15 @@ Open-Meteo API ───┘                              ▲
 
 ```
 pearl_aqi_predictor/
-├── feature_pipeline.py       # Hourly data ingestion + feature engineering
-├── training_pipeline.py      # Daily model training + registration
-├── api.py                    # FastAPI serving layer
-├── app.py                    # Streamlit dashboard
-├── eda.py                    # Exploratory data analysis (manual run)
-├── requirements*.txt         # Dependencies
-└── .github/workflows/        # CI/CD automation (GitHub Actions)
+├── feature_pipeline.py        # Hourly data ingestion + feature engineering
+├── training_pipeline.py       # Daily model training + registration
+├── api.py                     # FastAPI serving layer
+├── app.py                     # Streamlit dashboard
+├── eda.py                     # Exploratory data analysis (manual run)
+├── requirements*.txt          # Dependencies
+├── requirements-api*.txt      # Dependencies
+├── requirements-pipeline*.txt # Dependencies
+└── .github/workflows/         # CI/CD automation (GitHub Actions)
 ```
 
 ---
