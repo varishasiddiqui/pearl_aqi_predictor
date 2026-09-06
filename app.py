@@ -180,17 +180,23 @@ st.markdown("""<style>
     .guidance .g-title { font-weight: 700; font-size: 13px; color: var(--ink) !important; margin: 0 0 2px; }
     .guidance .g-body { font-size: 12.5px; color: var(--ink-3) !important; margin: 0; line-height: 1.5; }
 
-    /* ===== INSIGHT BANNER (EDA section headers) ===== */
-    .insight-banner {
-        background: linear-gradient(135deg, #4338CA, #3730A3);
-        border-radius: 14px; padding: 16px 20px; margin: 4px 0 12px;
+    /* ===== INSIGHT SECTION LABELS (EDA sub-headers) — plain, theme-matched, no boxes ===== */
+    .insight-label {
+        font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px;
+        color: var(--ink) !important; margin: 22px 0 2px; padding-left: 10px;
+        border-left: 3px solid #45D9C8;
     }
-    .insight-banner .ib-title {
-        font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 14.5px;
-        color: #FFFFFF !important; letter-spacing: 0.02em; margin: 0 0 4px; text-transform: uppercase;
-    }
-    .insight-banner .ib-body { font-size: 12px; color: #DCDDF7 !important; margin: 0; }
+    .insight-sublabel { font-size: 11.5px; color: var(--ink-4) !important; margin: 0 0 10px 13px; }
     .insight-caption { font-size: 11px; color: var(--ink-4); margin: 0 0 6px; }
+
+    /* Toggle switch — match the app's teal accent instead of Streamlit's default blue */
+    [data-testid="stToggle"] label div[data-baseweb="checkbox"] > div:first-child {
+        background-color: var(--panel-2) !important; border-color: var(--line) !important;
+    }
+    [data-testid="stToggle"] input:checked ~ div[data-baseweb="checkbox"] > div:first-child {
+        background-color: #45D9C8 !important;
+    }
+    [data-testid="stToggle"] p { color: var(--ink-2) !important; font-size: 13px; }
 
     .stAlert { border-radius: 12px !important; background: var(--panel) !important; border: 1px solid var(--line) !important; }
     .stAlert p { color: var(--ink-2) !important; }
@@ -534,8 +540,6 @@ def build_aqi_scale_html(value, scale_max=500):
 def _style_dark_ax(ax, show_x_grid=False):
     ax.set_facecolor("#0A0C10")
     ax.tick_params(colors="#7B8395", labelsize=8)
-    for lab in ax.get_xticklabels() + ax.get_yticklabels():
-        lab.set_fontfamily("Inter")
     for s in ax.spines.values():
         s.set_visible(False)
     ax.grid(True, axis="y", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
@@ -590,24 +594,29 @@ def plot_monthly_avg(df):
 def plot_correlation_heatmap_dark(df):
     numeric_cols = df.select_dtypes("number").columns
     corr = df[numeric_cols].corr()
-    fig, ax = plt.subplots(figsize=(6.8, 5.8))
+    n = len(corr.columns)
+    # Sized for FULL container width (not a half column) — with ~20 features
+    # a cramped half-width heatmap turns into unreadable overlapping labels,
+    # so this needs real horizontal room to stay legible.
+    fig, ax = plt.subplots(figsize=(11, max(6.5, 0.42 * n)))
     fig.patch.set_facecolor("#0A0C10")
     ax.set_facecolor("#0A0C10")
     try:
         import seaborn as sns
         sns.heatmap(
             corr, cmap="coolwarm", center=0, ax=ax, cbar_kws={"shrink": 0.7},
-            linewidths=0.4, linecolor="#0A0C10", annot=False,
+            linewidths=0.4, linecolor="#0A0C10", annot=False, square=False,
         )
         cbar = ax.collections[0].colorbar
-        cbar.ax.yaxis.set_tick_params(color="#7B8395", labelsize=7)
+        cbar.ax.yaxis.set_tick_params(color="#7B8395", labelsize=8)
         plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="#B4BBC9")
     except ImportError:
         im = ax.imshow(corr, cmap="coolwarm", vmin=-1, vmax=1)
-        ax.set_xticks(range(len(corr.columns))); ax.set_xticklabels(corr.columns, rotation=90)
+        ax.set_xticks(range(len(corr.columns))); ax.set_xticklabels(corr.columns)
         ax.set_yticks(range(len(corr.columns))); ax.set_yticklabels(corr.columns)
         fig.colorbar(im, ax=ax, shrink=0.7)
-    ax.tick_params(colors="#7B8395", labelsize=7)
+    ax.tick_params(colors="#7B8395", labelsize=8.5)
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
     for lab in ax.get_xticklabels() + ax.get_yticklabels():
         lab.set_color("#B4BBC9")
     plt.tight_layout()
@@ -737,7 +746,6 @@ try:
                 ax.grid(True, axis="y", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
                 ax.grid(False, axis="x")
                 ax.tick_params(colors="#7B8395", labelsize=8)
-                for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
                 for s in ax.spines.values(): s.set_visible(False)
                 ax.legend(frameon=False, labelcolor="#B4BBC9", fontsize=8, loc="upper right")
                 if all_vals: ax.set_ylim(max(0, min(all_vals) - 10), max(all_vals) + 10)
@@ -796,7 +804,6 @@ try:
                     ax.grid(True, axis="y", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
                     ax.grid(False, axis="x")
                     ax.tick_params(colors="#7B8395", labelsize=7)
-                    for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
                     for s in ax.spines.values(): s.set_visible(False)
                     plt.tight_layout()
                     st.pyplot(fig)
@@ -879,7 +886,6 @@ try:
                     ax.axvline(0, color="#4E5563", linewidth=0.8)
                     ax.set_xlabel("Impact on predicted AQI (SHAP value)", color="#7B8395", fontsize=9)
                     ax.tick_params(colors="#7B8395", labelsize=9)
-                    for l in ax.get_xticklabels() + ax.get_yticklabels(): l.set_fontfamily("Inter")
                     for s in ax.spines.values(): s.set_visible(False)
                     ax.grid(True, axis="x", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
                     plt.tight_layout()
@@ -929,41 +935,48 @@ try:
                 span_end = full_hist_df["datetime"].max().strftime("%d %b %Y")
                 st.html(f"<p class='insight-caption'>{n_rows:,} hourly readings · {span_start} → {span_end}</p>")
 
+                # Full width — a time series with months of hourly data needs
+                # real horizontal room, not a squeezed half-column.
+                st.html("<p class='section-note'>AQI over time — Karachi</p>")
+                st.pyplot(plot_full_aqi_timeseries(full_hist_df))
+                plt.close("all")
+
+                # Two columns — both are compact categorical bar charts
+                # (24 hours / 12 months), so half-width stays readable.
                 col1, col2 = st.columns(2)
-
                 with col1:
-                    st.html("<p class='section-note'>AQI over time — Karachi</p>")
-                    st.pyplot(plot_full_aqi_timeseries(full_hist_df))
-                    plt.close("all")
-
+                    st.html("<p class='section-note'>Average AQI by hour of day</p>")
+                    if "hour" in full_hist_df.columns:
+                        st.pyplot(plot_hourly_avg(full_hist_df))
+                        plt.close("all")
+                    else:
+                        st.info("`hour` column not found in the feature store — skipping hourly chart.")
+                with col2:
                     st.html("""
-                    <div class='insight-banner'>
-                        <p class='ib-title'>Monthly seasonal variation</p>
-                        <p class='ib-body'>Distribution of air quality metrics across months.</p>
-                    </div>""")
+                    <p class='insight-label'>Monthly seasonal variation</p>
+                    <p class='insight-sublabel'>Distribution of air quality metrics across months.</p>""")
                     if "month" in full_hist_df.columns:
                         st.pyplot(plot_monthly_avg(full_hist_df))
                         plt.close("all")
                     else:
                         st.info("`month` column not found in the feature store — skipping seasonal chart.")
 
-                with col2:
-                    st.html("<p class='section-note'>Average AQI by hour of day — Karachi</p>")
-                    if "hour" in full_hist_df.columns:
-                        st.pyplot(plot_hourly_avg(full_hist_df))
-                        plt.close("all")
-                    else:
-                        st.info("`hour` column not found in the feature store — skipping hourly chart.")
+                # Full width — correlation heatmap has ~20 features; it needs
+                # the whole container to stay legible (this was the squeeze
+                # that broke it before).
+                st.html("""
+                <p class='insight-label'>Feature correlation matrix</p>
+                <p class='insight-sublabel'>Linear correlation between target AQI and key pollutants/weather features.</p>""")
+                st.pyplot(plot_correlation_heatmap_dark(full_hist_df))
+                plt.close("all")
 
-                    st.html("""
-                    <div class='insight-banner'>
-                        <p class='ib-title'>Feature correlation matrix</p>
-                        <p class='ib-body'>Linear correlation heatmap between target AQI and key pollutants.</p>
-                    </div>""")
-                    st.pyplot(plot_correlation_heatmap_dark(full_hist_df))
-                    plt.close("all")
-
-                with st.expander("Summary statistics"):
+                # Summary stats — a plain toggle instead of st.expander.
+                # st.expander's arrow relies on an icon-ligature font that
+                # can flash as literal text ("arrow_right") before it loads;
+                # a toggle avoids that dependency entirely.
+                st.html("<div style='margin-top:6px;'></div>")
+                show_stats = st.toggle("Show summary statistics", value=False)
+                if show_stats:
                     st.dataframe(full_hist_df.describe(include="all").T, use_container_width=True)
                     na_counts = full_hist_df.isna().sum().sort_values(ascending=False)
                     na_counts = na_counts[na_counts > 0]
