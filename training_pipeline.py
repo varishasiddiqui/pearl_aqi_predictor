@@ -104,6 +104,46 @@ def build_lstm_sequences(X_arr, y_arr, timesteps=TIMESTEPS):
     return np.array(Xs), np.array(ys)
 
 
+def tune_ridge_alpha(X_train_scaled, y_train):
+    """RidgeCV auto-selects the regularization strength (alpha) using the
+    same TimeSeriesSplit CV as the rest of this file, instead of the
+    previous fixed guess of alpha=100.0. Too-high an alpha over-regularizes
+    Ridge until its predictions collapse toward the target's mean regardless
+    of input — that was the cause of the earlier flat, poorly-fit holdout
+    predictions."""
+    from sklearn.linear_model import RidgeCV
+
+    alphas = np.logspace(-2, 3, 30)  # 0.01 .. 1000, log-spaced
+    ridge_cv = RidgeCV(alphas=alphas, cv=TimeSeriesSplit(n_splits=5))
+    ridge_cv.fit(X_train_scaled, y_train)
+    print(f"RidgeCV selected alpha={ridge_cv.alpha_:.4g} (searched {len(alphas)} values between 0.01 and 1000)")
+    return float(ridge_cv.alpha_)
+
+
+def tune_random_forest(X_train, y_train):
+    """Small grid search over RandomForest depth/estimator count, scored
+    with the same TimeSeriesSplit CV used everywhere else in this file,
+    instead of the previous fixed guess of n_estimators=200, max_depth=10."""
+    candidates = [
+        {"n_estimators": 200, "max_depth": 8},
+        {"n_estimators": 200, "max_depth": 12},
+        {"n_estimators": 300, "max_depth": 12},
+        {"n_estimators": 300, "max_depth": None},
+    ]
+    best_params, best_rmse = None, np.inf
+    for params in candidates:
+        scores = cross_validate_model(
+            lambda p=params: RandomForestRegressor(random_state=42, **p),
+            X_train, y_train, scale=False,
+        )
+        print(f"RandomForest candidate {params} -> CV RMSE={scores['rmse_mean']:.3f}")
+        if scores["rmse_mean"] < best_rmse:
+            best_rmse = scores["rmse_mean"]
+            best_params = params
+    print(f"RandomForest selected params: {best_params}")
+    return best_params
+
+
 def train_and_evaluate(df, feature_cols):
     X = df[feature_cols].reset_index(drop=True)
     y = df["target_aqi_24hr"].reset_index(drop=True)
@@ -118,10 +158,14 @@ def train_and_evaluate(df, feature_cols):
     X_train_scaled = scaler.transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
+    print("\n--- Hyperparameter tuning (TimeSeriesSplit CV) ---")
+    best_alpha = tune_ridge_alpha(X_train_scaled, y_train)
+    rf_params = tune_random_forest(X_train, y_train)
+
     print("\n--- Cross-validation (TimeSeriesSplit) ---")
-    cv_ridge = cross_validate_model(lambda: Ridge(alpha=100.0), X_train, y_train, scale=True)
+    cv_ridge = cross_validate_model(lambda: Ridge(alpha=best_alpha), X_train, y_train, scale=True)
     cv_rf = cross_validate_model(
-        lambda: RandomForestRegressor(n_estimators=200, max_depth=10, random_state=42),
+        lambda: RandomForestRegressor(random_state=42, **rf_params),
         X_train, y_train, scale=False,
     )
     print("Ridge CV:", cv_ridge)
@@ -149,11 +193,12 @@ def train_and_evaluate(df, feature_cols):
     lstm_r2 = r2_score(y_test_lstm, lstm_preds)
     print(f"LSTM (single holdout): RMSE={lstm_rmse:.2f} MAE={lstm_mae:.2f} R2={lstm_r2:.3f}")
 
-    # Final holdout comparison, same test set, all models
-    ridge_final = Ridge(alpha=100.0).fit(X_train_scaled, y_train)
+    # Final holdout comparison, same test set, all models — using the
+    # tuned alpha / RF params found above, not fixed guesses.
+    ridge_final = Ridge(alpha=best_alpha).fit(X_train_scaled, y_train)
     ridge_test_preds = ridge_final.predict(X_test_scaled)
 
-    rf_final = RandomForestRegressor(n_estimators=200, max_depth=10, random_state=42).fit(X_train, y_train)
+    rf_final = RandomForestRegressor(random_state=42, **rf_params).fit(X_train, y_train)
     rf_test_preds = rf_final.predict(X_test)
 
     results_table = pd.DataFrame({
@@ -193,7 +238,7 @@ def train_and_evaluate(df, feature_cols):
         best_actual, best_predicted = y_test_lstm, lstm_preds
         best_dates = dates_test.iloc[TIMESTEPS:].values
 
-    return best_model_name, results_table, X, y, best_actual, best_predicted, best_dates
+    return best_model_name, results_table, X, y, best_actual, best_predicted, best_dates, best_alpha, rf_params
 
 
 def plot_actual_vs_predicted(y_actual, y_predicted, model_name, save_path):
@@ -252,7 +297,7 @@ def plot_actual_vs_predicted_timeseries(dates, y_actual, y_predicted, model_name
     print(f"Saved actual-vs-predicted time series plot to {save_path}")
 
 
-def refit_and_save(best_model_name, X, y, feature_cols):
+def refit_and_save(best_model_name, X, y, feature_cols, best_alpha, rf_params):
     model_dir = "model_dir"
     os.makedirs(model_dir, exist_ok=True)
 
@@ -260,11 +305,11 @@ def refit_and_save(best_model_name, X, y, feature_cols):
     X_all_scaled = final_scaler.transform(X)
 
     if best_model_name == "Ridge":
-        deployment_model = Ridge(alpha=100.0).fit(X_all_scaled, y)
+        deployment_model = Ridge(alpha=best_alpha).fit(X_all_scaled, y)
         model_file = os.path.join(model_dir, "best_model.pkl")
         joblib.dump(deployment_model, model_file)
     elif best_model_name == "RandomForest":
-        deployment_model = RandomForestRegressor(n_estimators=200, max_depth=10, random_state=42).fit(X, y)
+        deployment_model = RandomForestRegressor(random_state=42, **rf_params).fit(X, y)
         model_file = os.path.join(model_dir, "best_model.pkl")
         joblib.dump(deployment_model, model_file)
     else:  # LSTM
@@ -336,7 +381,8 @@ def register_model(project, model_dir, best_model_name, results_table, feature_c
 def main():
     df, project = load_features()
     feature_cols = select_features(df)
-    best_model_name, results_table, X, y, best_actual, best_predicted, best_dates = train_and_evaluate(df, feature_cols)
+    (best_model_name, results_table, X, y, best_actual, best_predicted,
+     best_dates, best_alpha, rf_params) = train_and_evaluate(df, feature_cols)
 
     if results_table["R2"].max() < 0:
         print(
@@ -346,7 +392,7 @@ def main():
             "rather than tuning models further. Proceeding to save/register anyway."
         )
 
-    model_dir = refit_and_save(best_model_name, X, y, feature_cols)
+    model_dir = refit_and_save(best_model_name, X, y, feature_cols, best_alpha, rf_params)
     plot_actual_vs_predicted(
         best_actual, best_predicted, best_model_name,
         os.path.join(model_dir, "actual_vs_predicted.png"),
