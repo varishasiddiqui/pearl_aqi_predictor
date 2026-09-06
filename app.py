@@ -236,20 +236,10 @@ def load_model():
                     # own RMSE, or, if the training script logged them, the
                     # other candidates' scores too) is all that's available here.
                     raw_metrics = getattr(registry_model, "training_metrics", None) or {}
-                    # actual_vs_predicted*.png files are saved into model_dir
-                    # by training_pipeline.py (plot_actual_vs_predicted /
-                    # plot_actual_vs_predicted_timeseries) and registered
-                    # together with the model — pass the paths along so the
-                    # dashboard can display them directly instead of
-                    # recomputing anything.
-                    av_pred_path = os.path.join(model_dir, "actual_vs_predicted.png")
-                    av_pred_ts_path = os.path.join(model_dir, "actual_vs_predicted_timeseries.png")
                     model_meta = {
                         "version": registry_model.version,
                         "metrics": dict(raw_metrics),
                         "description": getattr(registry_model, "description", None),
-                        "actual_vs_predicted_path": av_pred_path if os.path.exists(av_pred_path) else None,
-                        "actual_vs_predicted_timeseries_path": av_pred_ts_path if os.path.exists(av_pred_ts_path) else None,
                     }
                     return model, scaler, features, f"Hopsworks v{registry_model.version}", model_meta
                 except Exception as version_err:
@@ -344,6 +334,29 @@ def plot_metric_comparison(metric_name, values: dict, winner_prefix=None):
     for i, v in enumerate(values_list):
         ax.text(v, i, f"  {v:.3f}", va="center", color="#B4BBC9", fontsize=8.5)
     ax.tick_params(colors="#7B8395", labelsize=9)
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.grid(True, axis="x", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
+    plt.tight_layout()
+    return fig
+
+
+def plot_global_feature_importance(model, feature_cols):
+    if isinstance(model, RandomForestRegressor):
+        importances = model.feature_importances_
+    elif isinstance(model, Ridge):
+        importances = np.abs(model.coef_)
+    else:
+        return None
+    order = np.argsort(importances)
+    labels = [feature_cols[i] for i in order]
+    values = [importances[i] for i in order]
+    fig, ax = plt.subplots(figsize=(9, max(3, 0.32 * len(labels))))
+    fig.patch.set_facecolor("#0A0C10")
+    ax.set_facecolor("#0A0C10")
+    ax.barh(labels, values, color="#45D9C8", height=0.6)
+    ax.set_xlabel("Relative importance", color="#7B8395", fontsize=9)
+    ax.tick_params(colors="#7B8395", labelsize=8.5)
     for s in ax.spines.values():
         s.set_visible(False)
     ax.grid(True, axis="x", alpha=0.12, color="#7B8395", linestyle="-", linewidth=0.6)
@@ -1214,23 +1227,12 @@ try:
                 else:
                     st.info("No training metrics were logged for this registered model version, so there's nothing to compare yet.")
 
-            # Actual vs. Predicted AQI — saved as PNGs by
-            # training_pipeline.py (plot_actual_vs_predicted /
-            # plot_actual_vs_predicted_timeseries) into the same model_dir
-            # that gets registered in Hopsworks, so they're just displayed
-            # here, not recomputed.
-            av_pred_path = model_meta.get("actual_vs_predicted_path") if model_meta else None
-            av_pred_ts_path = model_meta.get("actual_vs_predicted_timeseries_path") if model_meta else None
-
-            if av_pred_ts_path:
-                st.html("<p class='insight-label' style='margin-top:20px;'>Actual vs. Predicted AQI over time (last 30 days of holdout)</p>")
-                st.image(av_pred_ts_path, use_container_width=True)
-                st.html("<p class='insight-caption'>Solid line = what actually happened, dashed line = what the deployed model predicted, on data it never trained on.</p>")
-
-            if av_pred_path:
-                st.html("<p class='insight-label' style='margin-top:20px;'>Actual vs. Predicted AQI (holdout set)</p>")
-                st.image(av_pred_path, use_container_width=False)
-                st.html("<p class='insight-caption'>Points closer to the red diagonal (y = x) mean the deployed model's predictions were closer to what actually happened, on data the model never trained on.</p>")
+            fi_fig = plot_global_feature_importance(model, feature_cols)
+            if fi_fig:
+                st.html("<p class='insight-label' style='margin-top:20px;'>Global feature importance</p>")
+                st.pyplot(fi_fig)
+                plt.close(fi_fig)
+                st.html("<p class='insight-caption'>Which features the deployed model relies on most across all predictions, not just the current one.</p>")
 
             st.html("<p class='insight-label' style='margin-top:20px;'>Features used</p>")
             st.html(f"<p class='insight-sublabel' style='margin-left:13px;'>{len(feature_cols)} correlation-selected features: {', '.join(feature_cols)}</p>")
