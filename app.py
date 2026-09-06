@@ -1139,7 +1139,7 @@ try:
                 winner_prefix = _TYPE_NAME_TO_PREFIX.get(type_name)
                 metric_order = ["rmse", "mae", "r2"]
                 ordered_metrics = [m for m in metric_order if m in groups] + [m for m in groups if m not in metric_order]
-                metric_captions = {"rmse": "RMSE (lower is better)", "mae": "MAE (lower is better)", "r2": "R² (higher is better)"}
+                metric_captions = {"rmse": "RMSE", "mae": "MAE", "r2": "R²"}
                 cols = st.columns(len(ordered_metrics))
                 for col, metric_name in zip(cols, ordered_metrics):
                     with col:
