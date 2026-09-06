@@ -11,12 +11,6 @@ import shap
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
 
-# 'Inter'/'Space Grotesk' are loaded via CSS for the browser, but matplotlib
-# renders server-side and doesn't have them installed — every ax label call
-# that requested fontfamily='Inter' was silently falling back to DejaVu Sans
-# anyway, just with a "findfont: Font family 'Inter' not found" warning
-# printed per element. Set the real fallback explicitly so charts still
-# look right and the logs stay clean.
 plt.rcParams["font.family"] = "DejaVu Sans"
 
 KARACHI_TZ = timezone(timedelta(hours=5))
@@ -230,11 +224,7 @@ def load_model():
                     model = joblib.load(os.path.join(model_dir, "best_model.pkl"))
                     scaler = joblib.load(os.path.join(model_dir, "scaler.pkl"))
                     features = joblib.load(os.path.join(model_dir, "feature_cols.pkl"))
-                    # Only the winning model gets registered — Hopsworks doesn't
-                    # keep the rejected candidates. Whatever was logged into
-                    # training_metrics at registration time (e.g. this model's
-                    # own RMSE, or, if the training script logged them, the
-                    # other candidates' scores too) is all that's available here.
+
                     raw_metrics = getattr(registry_model, "training_metrics", None) or {}
                     model_meta = {
                         "version": registry_model.version,
@@ -271,9 +261,7 @@ def describe_model_type(m):
 
 
 def plot_model_metrics(metrics: dict):
-    """Fallback bar chart of whatever numeric metrics were logged, used only
-    when they don't match the '<model>_<metric>' pattern group_candidate_metrics
-    expects (e.g. an older registered version with just a flat {rmse, mae, r2})."""
+
     items = [(k, v) for k, v in metrics.items() if isinstance(v, (int, float))]
     if not items:
         return None
@@ -303,10 +291,7 @@ _TYPE_NAME_TO_PREFIX = {"Ridge Regression": "ridge", "Random Forest": "randomfor
 
 
 def group_candidate_metrics(metrics: dict):
-    """Groups '<model>_<metric>' keys (e.g. 'ridge_rmse', logged by
-    training_pipeline.py's register_model()) into {metric: {model: value}}.
-    Unprefixed keys (the winner's own bare 'rmse'/'mae'/'r2') are ignored
-    here since they'd just duplicate that model's row in the grouped view."""
+
     groups = {}
     for key, val in metrics.items():
         if not isinstance(val, (int, float)) or "_" not in key:
@@ -320,9 +305,7 @@ def group_candidate_metrics(metrics: dict):
 
 
 def plot_metric_comparison(metric_name, values: dict, winner_prefix=None):
-    """One metric (RMSE, MAE, or R2) compared across every candidate model,
-    with the deployed model's bar highlighted in teal — this is the 'why we
-    chose this model' chart."""
+
     ordered = sorted(values.items(), key=lambda kv: kv[1], reverse=(metric_name == "r2"))
     labels = [_CANDIDATE_LABELS.get(k, k.title()) for k, _ in ordered]
     values_list = [v for _, v in ordered]
@@ -381,8 +364,6 @@ def build_shap_explainer(_model, _background):
     elif isinstance(_model, Ridge):
         return shap.LinearExplainer(_model, _background), "linear"
     else:
-        # LSTM: takes a (timesteps, features) sequence, not a flat row, so it
-        # needs a gradient-based explainer over sequence windows instead.
         import tensorflow as tf  # noqa: F401  (guarded, TF is heavy)
         return shap.GradientExplainer(_model, _background), "lstm"
 
@@ -392,18 +373,7 @@ _has_hw = bool(st.secrets.get("HOPSWORKS_API_KEY", ""))
 
 
 def plot_shap_beeswarm_dark(sv_bg, feature_values_bg, feature_cols, sv_latest=None):
-    """
-    The 'real' scattered SHAP plot (a beeswarm): every dot is one historical
-    instance's SHAP value for a feature, colored by that instance's actual
-    feature value (blue = low, red = high) — same convention as shap's own
-    summary_plot. sv_latest, if given, overlays the *current* forecast's
-    per-feature SHAP value as a hollow diamond on top of the distribution,
-    so "why this forecast" stays answerable alongside the fuller picture.
 
-    sv_bg: array (n_samples, n_features)
-    feature_values_bg: DataFrame (n_samples, n_features), raw (unscaled) values
-    sv_latest: optional array (n_features,)
-    """
     n_features = len(feature_cols)
     order = np.argsort(np.mean(np.abs(sv_bg), axis=0))[::-1]  # most important first
     ordered_features = [feature_cols[i] for i in order]
@@ -500,13 +470,6 @@ def fetch_recent_actuals_from_feature_store(lookback_hours=72):
         return pd.DataFrame()
 
 
-# ---------------------------------------------------------------------------
-# Full history for EDA / historical insights — same feature group as above,
-# but no lookback trim. This is the Streamlit-native equivalent of eda.py's
-# load_data(), used to power the "Historical insights" section below.
-# Cached longer (1h) since full-history reads are heavier and this data
-# doesn't need to be as fresh as the live/trend sections.
-# ---------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
 def fetch_full_history_from_feature_store():
     hopsworks_key = st.secrets.get("HOPSWORKS_API_KEY", "")
@@ -519,12 +482,7 @@ def fetch_full_history_from_feature_store():
         fs = project.get_feature_store()
         fg = fs.get_feature_group(name=FEATURE_GROUP_NAME, version=FEATURE_GROUP_VERSION)
 
-        # Hopsworks' Arrow Flight query service can drop the connection on
-        # large, unfiltered reads ("Flight returned unavailable error ...
-        # Socket closed") — this is transient/server-side, not app logic.
-        # Retry a couple of times on the fast path, then fall back to the
-        # Hive/Spark-based read, which is slower but far more tolerant of
-        # big, unfiltered scans like this one.
+
         df, last_err = None, None
         attempts = [{}, {}, {"use_hive": True}]
         for i, read_options in enumerate(attempts, start=1):
@@ -702,11 +660,6 @@ def build_forecast(feature_df, hist_lookback_df, current_aqi, current_row, featu
     return times, preds
 
 
-# ---------------------------------------------------------------------------
-# Presentation-only helper: builds the horizontal AQI scale bar markup for
-# the hero card. Segment thresholds mirror aqi_info() exactly. Pure
-# rendering — no AQI math, model, or data logic lives here.
-# ---------------------------------------------------------------------------
 _SCALE_SEGMENTS = [
     (0, 50, "#34D399"), (50, 100, "#FBBF24"), (100, 150, "#FB923C"),
     (150, 200, "#F87171"), (200, 300, "#A78BFA"), (300, 500, "#EF4444"),
@@ -725,11 +678,6 @@ def build_aqi_scale_html(value, scale_max=500):
     </div>"""
 
 
-# ---------------------------------------------------------------------------
-# EDA / historical-insights plots — dark-themed inline equivalents of the
-# PNGs eda.py saves to disk. Same underlying computations (groupby hour /
-# month, .corr()), just rendered straight into the app instead of a file.
-# ---------------------------------------------------------------------------
 def _style_dark_ax(ax, show_x_grid=False):
     ax.set_facecolor("#0A0C10")
     ax.tick_params(colors="#7B8395", labelsize=8)
@@ -788,9 +736,7 @@ def plot_correlation_heatmap_dark(df):
     numeric_cols = df.select_dtypes("number").columns
     corr = df[numeric_cols].corr()
     n = len(corr.columns)
-    # Sized for FULL container width (not a half column) — with ~20 features
-    # a cramped half-width heatmap turns into unreadable overlapping labels,
-    # so this needs real horizontal room to stay legible.
+
     fig, ax = plt.subplots(figsize=(13, max(6.5, 0.4 * n)))
     fig.patch.set_facecolor("#0A0C10")
     ax.set_facecolor("#0A0C10")
@@ -1117,14 +1063,11 @@ try:
                 span_end = full_hist_df["datetime"].max().strftime("%d %b %Y")
                 st.html(f"<p class='insight-caption'>{n_rows:,} hourly readings · {span_start} → {span_end}</p>")
 
-                # Full width — a time series with months of hourly data needs
-                # real horizontal room, not a squeezed half-column.
+
                 st.html("<p class='section-note'>AQI over time — Karachi</p>")
                 st.pyplot(plot_full_aqi_timeseries(full_hist_df))
                 plt.close("all")
 
-                # Two columns — both are compact categorical bar charts
-                # (24 hours / 12 months), so half-width stays readable.
                 col1, col2 = st.columns(2)
                 with col1:
                     st.html("<p class='section-note'>Average AQI by hour of day</p>")
@@ -1143,9 +1086,6 @@ try:
                     else:
                         st.info("`month` column not found in the feature store — skipping seasonal chart.")
 
-                # Full width — correlation heatmap has ~20 features; it needs
-                # the whole container to stay legible (this was the squeeze
-                # that broke it before).
                 st.html("""
                 <p class='insight-label'>Feature correlation matrix</p>
                 <p class='insight-sublabel'>Linear correlation between target AQI and key pollutants/weather features.</p>""")
@@ -1186,8 +1126,7 @@ try:
             groups = group_candidate_metrics(metrics)
 
             if groups:
-                # Full Ridge/RandomForest/LSTM comparison is available —
-                # this is the "why we chose this model" view.
+
                 st.html("<p class='insight-label' style='margin-top:20px;'>Why this model — holdout comparison across candidates</p>")
                 winner_prefix = _TYPE_NAME_TO_PREFIX.get(type_name)
                 metric_order = ["rmse", "mae", "r2"]
@@ -1213,9 +1152,7 @@ try:
                 comp_df = pd.DataFrame(rows).dropna(how="all", subset=["RMSE", "MAE", "R2"])
                 st.dataframe(comp_df, use_container_width=True, hide_index=True)
             else:
-                # Older registered version without per-candidate keys yet —
-                # fall back to whatever flat metrics exist, or explain what's
-                # needed to unlock the comparison above.
+
                 numeric_metrics = {k: v for k, v in metrics.items() if isinstance(v, (int, float))}
                 if numeric_metrics:
                     st.html("<p class='insight-label' style='margin-top:18px;'>Logged metrics for this version</p>")
