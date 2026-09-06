@@ -1,13 +1,4 @@
-"""
-Exploratory Data Analysis for the Karachi AQI feature store.
 
-Run manually (never triggered by CI/CD, so it can't affect the live
-feature/training pipelines or the dashboard):
-
-    HOPSWORKS_API_KEY=xxx python eda.py
-
-Outputs PNGs + printed summary stats into eda_output/.
-"""
 import os
 
 import matplotlib.pyplot as plt
