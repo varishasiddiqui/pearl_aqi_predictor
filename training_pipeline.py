@@ -1,6 +1,9 @@
 import os
 
 import joblib
+import matplotlib
+matplotlib.use("Agg")  
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
@@ -27,11 +30,6 @@ def load_features():
     try:
         df = fg.read(read_options={"arrow_flight_config": {"timeout": 30}})
     except FeatureStoreException as e:
-        # Hopsworks' Arrow Flight "Query Service" is a separate, sometimes
-        # flaky component from the offline storage itself (this is the same
-        # class of transient server-side issue we've hit before — the data
-        # is fine, the read path is what's unavailable). Fall back to the
-        # older Hive-based read path instead of failing the whole run.
         print(f"Query Service read failed ({e}); retrying via Hive fallback...")
         df = fg.read(read_options={"use_hive": True})
 
@@ -175,7 +173,40 @@ def train_and_evaluate(df, feature_cols):
     best_model_name = results_table.loc[results_table["R2"].idxmax(), "Model"]
     print(f"\nBest model on this holdout: {best_model_name}")
 
-    return best_model_name, results_table, X, y
+    # Actual vs. predicted pairs for the WINNING model only, on its own
+    # holdout set. LSTM's test set is shorter than the others (it loses the
+    # first TIMESTEPS rows to sequence-building), so it needs its own
+    # actual/predicted pair rather than reusing y_test directly.
+    if best_model_name == "Ridge":
+        best_actual, best_predicted = y_test.values, ridge_test_preds
+    elif best_model_name == "RandomForest":
+        best_actual, best_predicted = y_test.values, rf_test_preds
+    else:  # LSTM
+        best_actual, best_predicted = y_test_lstm, lstm_preds
+
+    return best_model_name, results_table, X, y, best_actual, best_predicted
+
+
+def plot_actual_vs_predicted(y_actual, y_predicted, model_name, save_path):
+    """Scatter of actual vs. predicted AQI (holdout set) for the winning
+    model, with a y=x reference line. Points close to the diagonal mean the
+    model's predictions are close to what actually happened."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.scatter(y_actual, y_predicted, alpha=0.5, s=18, color="#2563EB", edgecolors="none")
+
+    lo = min(np.min(y_actual), np.min(y_predicted))
+    hi = max(np.max(y_actual), np.max(y_predicted))
+    ax.plot([lo, hi], [lo, hi], color="red", linestyle="--", linewidth=1.2, label="Perfect prediction (y = x)")
+
+    ax.set_xlabel("Actual AQI")
+    ax.set_ylabel("Predicted AQI")
+    ax.set_title(f"Actual vs. Predicted AQI — {model_name} (holdout set)")
+    ax.legend(loc="upper left", fontsize=8)
+    ax.set_aspect("equal", adjustable="box")
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150)
+    plt.close(fig)
+    print(f"Saved actual-vs-predicted plot to {save_path}")
 
 
 def refit_and_save(best_model_name, X, y, feature_cols):
@@ -223,15 +254,6 @@ def register_model(project, model_dir, best_model_name, results_table, feature_c
     final_mae = results_table.loc[results_table["Model"] == best_model_name, "MAE"].values[0]
     final_r2 = results_table.loc[results_table["Model"] == best_model_name, "R2"].values[0]
 
-    # Hopsworks only keeps the winning model's artifacts — the rejected
-    # candidates are gone once training finishes. So the *metrics* are the
-    # only place a "why we picked this model" comparison can live later
-    # (e.g. in the app's dashboard). Log every candidate's holdout score,
-    # not just the winner's, using "<model>_<metric>" keys (e.g.
-    # "ridge_rmse", "randomforest_mae", "lstm_r2") so a comparison chart can
-    # group them without needing to know model names in advance. The
-    # winner's own unprefixed "rmse"/"mae"/"r2" are kept too, for anything
-    # that only cares about the deployed model's headline numbers.
     all_metrics = {"rmse": float(final_rmse), "mae": float(final_mae), "r2": float(final_r2)}
     for _, row in results_table.iterrows():
         prefix = row["Model"].lower()  # "ridge" / "randomforest" / "lstm"
@@ -249,9 +271,10 @@ def register_model(project, model_dir, best_model_name, results_table, feature_c
             f"training_metrics for auditability."
         ),
     )
-    # Register the WHOLE folder (model + scaler + feature_cols), not just the
-    # model file on its own — app.py's load_model() downloads this folder and
-    # expects all three files to be inside it.
+    # Register the WHOLE folder (model + scaler + feature_cols +
+    # actual_vs_predicted.png), not just the model file on its own —
+    # app.py's load_model() downloads this folder and expects all of these
+    # files to be inside it.
     aqi_model.save(model_dir)
     print(f"Model registered in Hopsworks Model Registry (RMSE={final_rmse:.2f}, MAE={final_mae:.2f}, R2={final_r2:.3f}).")
     print("Full candidate comparison logged to training_metrics:")
@@ -261,7 +284,7 @@ def register_model(project, model_dir, best_model_name, results_table, feature_c
 def main():
     df, project = load_features()
     feature_cols = select_features(df)
-    best_model_name, results_table, X, y = train_and_evaluate(df, feature_cols)
+    best_model_name, results_table, X, y, best_actual, best_predicted = train_and_evaluate(df, feature_cols)
 
     if results_table["R2"].max() < 0:
         print(
@@ -272,6 +295,10 @@ def main():
         )
 
     model_dir = refit_and_save(best_model_name, X, y, feature_cols)
+    plot_actual_vs_predicted(
+        best_actual, best_predicted, best_model_name,
+        os.path.join(model_dir, "actual_vs_predicted.png"),
+    )
     register_model(project, model_dir, best_model_name, results_table, feature_cols)
 
 
