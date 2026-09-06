@@ -2,7 +2,7 @@ import os
 
 import joblib
 import matplotlib
-matplotlib.use("Agg")  
+matplotlib.use("Agg")  # headless — this script runs in CI, never a display
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -30,6 +30,11 @@ def load_features():
     try:
         df = fg.read(read_options={"arrow_flight_config": {"timeout": 30}})
     except FeatureStoreException as e:
+        # Hopsworks' Arrow Flight "Query Service" is a separate, sometimes
+        # flaky component from the offline storage itself (this is the same
+        # class of transient server-side issue we've hit before — the data
+        # is fine, the read path is what's unavailable). Fall back to the
+        # older Hive-based read path instead of failing the whole run.
         print(f"Query Service read failed ({e}); retrying via Hive fallback...")
         df = fg.read(read_options={"use_hive": True})
 
@@ -102,10 +107,12 @@ def build_lstm_sequences(X_arr, y_arr, timesteps=TIMESTEPS):
 def train_and_evaluate(df, feature_cols):
     X = df[feature_cols].reset_index(drop=True)
     y = df["target_aqi_24hr"].reset_index(drop=True)
+    dates = df["datetime"].reset_index(drop=True)
 
     split_idx = int(len(df) * 0.8)
     X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
     y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
+    dates_test = dates.iloc[split_idx:]
 
     scaler = StandardScaler().fit(X_train)
     X_train_scaled = scaler.transform(X_train)
@@ -176,15 +183,17 @@ def train_and_evaluate(df, feature_cols):
     # Actual vs. predicted pairs for the WINNING model only, on its own
     # holdout set. LSTM's test set is shorter than the others (it loses the
     # first TIMESTEPS rows to sequence-building), so it needs its own
-    # actual/predicted pair rather than reusing y_test directly.
+    # actual/predicted/date triplet rather than reusing y_test/dates_test
+    # directly.
     if best_model_name == "Ridge":
-        best_actual, best_predicted = y_test.values, ridge_test_preds
+        best_actual, best_predicted, best_dates = y_test.values, ridge_test_preds, dates_test.values
     elif best_model_name == "RandomForest":
-        best_actual, best_predicted = y_test.values, rf_test_preds
+        best_actual, best_predicted, best_dates = y_test.values, rf_test_preds, dates_test.values
     else:  # LSTM
         best_actual, best_predicted = y_test_lstm, lstm_preds
+        best_dates = dates_test.iloc[TIMESTEPS:].values
 
-    return best_model_name, results_table, X, y, best_actual, best_predicted
+    return best_model_name, results_table, X, y, best_actual, best_predicted, best_dates
 
 
 def plot_actual_vs_predicted(y_actual, y_predicted, model_name, save_path):
@@ -207,6 +216,40 @@ def plot_actual_vs_predicted(y_actual, y_predicted, model_name, save_path):
     fig.savefig(save_path, dpi=150)
     plt.close(fig)
     print(f"Saved actual-vs-predicted plot to {save_path}")
+
+
+def plot_actual_vs_predicted_timeseries(dates, y_actual, y_predicted, model_name, save_path, days=30):
+    """Actual vs. Predicted AQI over time, as two overlaid lines, restricted
+    to the last `days` days of the holdout set (falls back to the full
+    holdout if it's shorter than that). This is the time-series counterpart
+    to plot_actual_vs_predicted's scatter — easier to read for anyone who
+    wants to see WHEN the model over/under-predicted, not just by how much."""
+    dates = pd.to_datetime(pd.Series(dates)).reset_index(drop=True)
+    y_actual = pd.Series(y_actual).reset_index(drop=True)
+    y_predicted = pd.Series(y_predicted).reset_index(drop=True)
+
+    cutoff = dates.max() - pd.Timedelta(days=days)
+    mask = dates >= cutoff
+    if mask.sum() < 2:  # not enough points in that window — show everything instead
+        mask = pd.Series(True, index=dates.index)
+
+    plot_dates = dates[mask]
+    plot_actual = y_actual[mask]
+    plot_predicted = y_predicted[mask]
+
+    fig, ax = plt.subplots(figsize=(12, 4.5))
+    ax.plot(plot_dates, plot_actual, color="#1F2937", linewidth=1.4, label="Actual AQI")
+    ax.plot(plot_dates, plot_predicted, color="#2563EB", linewidth=1.4, linestyle="--", label="Predicted AQI")
+
+    ax.set_xlabel("Date")
+    ax.set_ylabel("AQI")
+    ax.set_title(f"Actual vs. Predicted AQI over time — {model_name} (last {days} days of holdout)")
+    ax.legend(loc="upper left", fontsize=9)
+    fig.autofmt_xdate()
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150)
+    plt.close(fig)
+    print(f"Saved actual-vs-predicted time series plot to {save_path}")
 
 
 def refit_and_save(best_model_name, X, y, feature_cols):
@@ -254,6 +297,15 @@ def register_model(project, model_dir, best_model_name, results_table, feature_c
     final_mae = results_table.loc[results_table["Model"] == best_model_name, "MAE"].values[0]
     final_r2 = results_table.loc[results_table["Model"] == best_model_name, "R2"].values[0]
 
+    # Hopsworks only keeps the winning model's artifacts — the rejected
+    # candidates are gone once training finishes. So the *metrics* are the
+    # only place a "why we picked this model" comparison can live later
+    # (e.g. in the app's dashboard). Log every candidate's holdout score,
+    # not just the winner's, using "<model>_<metric>" keys (e.g.
+    # "ridge_rmse", "randomforest_mae", "lstm_r2") so a comparison chart can
+    # group them without needing to know model names in advance. The
+    # winner's own unprefixed "rmse"/"mae"/"r2" are kept too, for anything
+    # that only cares about the deployed model's headline numbers.
     all_metrics = {"rmse": float(final_rmse), "mae": float(final_mae), "r2": float(final_r2)}
     for _, row in results_table.iterrows():
         prefix = row["Model"].lower()  # "ridge" / "randomforest" / "lstm"
@@ -272,9 +324,9 @@ def register_model(project, model_dir, best_model_name, results_table, feature_c
         ),
     )
     # Register the WHOLE folder (model + scaler + feature_cols +
-    # actual_vs_predicted.png), not just the model file on its own —
-    # app.py's load_model() downloads this folder and expects all of these
-    # files to be inside it.
+    # actual_vs_predicted.png + actual_vs_predicted_timeseries.png), not
+    # just the model file on its own — app.py's load_model() downloads this
+    # folder and expects all of these files to be inside it.
     aqi_model.save(model_dir)
     print(f"Model registered in Hopsworks Model Registry (RMSE={final_rmse:.2f}, MAE={final_mae:.2f}, R2={final_r2:.3f}).")
     print("Full candidate comparison logged to training_metrics:")
@@ -284,7 +336,7 @@ def register_model(project, model_dir, best_model_name, results_table, feature_c
 def main():
     df, project = load_features()
     feature_cols = select_features(df)
-    best_model_name, results_table, X, y, best_actual, best_predicted = train_and_evaluate(df, feature_cols)
+    best_model_name, results_table, X, y, best_actual, best_predicted, best_dates = train_and_evaluate(df, feature_cols)
 
     if results_table["R2"].max() < 0:
         print(
@@ -298,6 +350,10 @@ def main():
     plot_actual_vs_predicted(
         best_actual, best_predicted, best_model_name,
         os.path.join(model_dir, "actual_vs_predicted.png"),
+    )
+    plot_actual_vs_predicted_timeseries(
+        best_dates, best_actual, best_predicted, best_model_name,
+        os.path.join(model_dir, "actual_vs_predicted_timeseries.png"),
     )
     register_model(project, model_dir, best_model_name, results_table, feature_cols)
 
